@@ -392,6 +392,12 @@ function draw() {
     if (!paused) {
         if (typeof currentMode !== 'undefined' && currentMode === 'ecosystem' && multiChannel) {
             multiChannel.step();
+        } else if (typeof useFlowLenia !== 'undefined' && useFlowLenia && flowLenia) {
+            flowLenia.step();
+            // Update mass stats periodically
+            if (generation % 10 === 0 && typeof updateMassStats === 'function') {
+                updateMassStats();
+            }
         } else {
             lenia.step();
         }
@@ -430,12 +436,14 @@ function draw() {
         }
     } else {
         // Single channel mode: color map rendering
-        const cellSize = width / lenia.size;
+        // Use flow lenia or standard lenia based on mode
+        const sim = (typeof useFlowLenia !== 'undefined' && useFlowLenia && flowLenia) ? flowLenia : lenia;
+        const cellSize = width / sim.size;
 
-        for (let y = 0; y < lenia.size; y++) {
-            for (let x = 0; x < lenia.size; x++) {
-                const value = lenia.grid[y * lenia.size + x];
-                const color = lenia.getColor(value);
+        for (let y = 0; y < sim.size; y++) {
+            for (let x = 0; x < sim.size; x++) {
+                const value = sim.grid[y * sim.size + x];
+                const color = sim.getColor(value);
 
                 const px = Math.floor(x * cellSize);
                 const py = Math.floor(y * cellSize);
@@ -467,6 +475,8 @@ function updateStats() {
 
     if (typeof currentMode !== 'undefined' && currentMode === 'ecosystem' && multiChannel) {
         document.getElementById('stat-mass').textContent = multiChannel.totalMass().toFixed(1);
+    } else if (typeof useFlowLenia !== 'undefined' && useFlowLenia && flowLenia) {
+        document.getElementById('stat-mass').textContent = flowLenia.totalMass().toFixed(1);
     } else {
         document.getElementById('stat-mass').textContent = lenia.totalMass().toFixed(1);
     }
@@ -505,6 +515,18 @@ function handleDraw() {
             const gx = mouseX / cellSize;
             const gy = mouseY / cellSize;
             multiChannel.drawBlob(multiChannel.activeChannel, gx, gy, brushSize / cellSize * 2, drawMode);
+        } else if (typeof useFlowLenia !== 'undefined' && useFlowLenia && flowLenia) {
+            const cellSize = width / flowLenia.size;
+            const gx = mouseX / cellSize;
+            const gy = mouseY / cellSize;
+            flowLenia.drawBlob(gx, gy, brushSize / cellSize * 2, drawMode);
+            // Update initial mass after drawing
+            if (typeof initialMass !== 'undefined') {
+                initialMass = flowLenia.totalMass();
+                if (typeof updateMassStats === 'function') {
+                    updateMassStats();
+                }
+            }
         } else {
             const cellSize = width / lenia.size;
             const gx = mouseX / cellSize;
@@ -535,7 +557,11 @@ function keyPressed() {
 
 function resetSimulation() {
     const speciesSelect = document.getElementById('species-select');
-    lenia.loadSpecies(speciesSelect.value);
+    if (typeof useFlowLenia !== 'undefined' && useFlowLenia) {
+        flowLenia.loadSpecies(speciesSelect.value);
+    } else {
+        lenia.loadSpecies(speciesSelect.value);
+    }
     generation = 0;
 }
 

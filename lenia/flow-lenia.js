@@ -1,0 +1,531 @@
+/**
+ * Flow-Lenia Implementation
+ *
+ * Flow-Lenia transforms standard Lenia from "matter appearing/disappearing"
+ * to "matter flowing" - creating creatures that feel more physical and solid.
+ *
+ * Key difference from standard Lenia:
+ * - In standard Lenia, G(U) adds or removes mass directly
+ * - In Flow-Lenia, G(U) creates an "affinity map" - regions where matter WANTS to be
+ * - Matter then flows toward high-affinity regions via gradient descent
+ * - Total mass is conserved through reintegration tracking
+ *
+ * Algorithm:
+ * 1. Compute potential U = K * A (same as standard Lenia)
+ * 2. Compute affinity map: affinity = G(U) - growth function as affinity
+ * 3. Compute flow field F = ∇(affinity) using Sobel filter
+ * 4. Transport mass using reintegration tracking (mass-conservative)
+ *
+ * References:
+ * - Flow-Lenia Paper: https://direct.mit.edu/artl/article/31/2/228/130572/
+ * - arXiv: https://arxiv.org/abs/2212.07906
+ */
+
+class FlowLenia {
+    constructor(size) {
+        this.size = size;
+
+        // Main state: activation/mass grid
+        this.A = new Float32Array(size * size);
+
+        // Working buffers
+        this.potential = new Float32Array(size * size);   // K * A (convolution result)
+        this.affinity = new Float32Array(size * size);    // G(potential) - where mass wants to be
+        this.Fx = new Float32Array(size * size);          // Flow field X component
+        this.Fy = new Float32Array(size * size);          // Flow field Y component
+        this.newA = new Float32Array(size * size);        // Buffer for mass after transport
+
+        // Parameters (same as standard Lenia)
+        this.R = 13;           // Kernel radius
+        this.peaks = 1;        // Number of kernel peaks
+        this.mu = 0.15;        // Growth function center
+        this.sigma = 0.015;    // Growth function width
+        this.dt = 0.1;         // Time step
+
+        // Flow-specific parameters
+        this.flowStrength = 1.0;   // How strongly mass follows the gradient (0.5 - 2.0)
+        this.diffusion = 0.1;      // Diffusion rate to prevent mass collapse (0.0 - 0.3)
+
+        // Kernel configuration
+        this.kernelType = 'ring';
+        this.kernelParams = {
+            arms: 3,
+            tightness: 1.5,
+            points: 5,
+            sharpness: 0.5,
+            scales: [0.3, 0.6, 0.9],
+            weights: [1, 0.5, 0.25],
+            angle: 0,
+            eccentricity: 0.6,
+            bias: 0.3
+        };
+
+        this.kernel = null;
+        this.colorMap = 'viridis';
+
+        this.updateKernel();
+    }
+
+    /**
+     * Update the convolution kernel based on current parameters
+     */
+    updateKernel() {
+        const p = this.kernelParams;
+        switch (this.kernelType) {
+            case 'ring':
+                this.kernel = Kernels.ring(this.R, this.peaks);
+                break;
+            case 'gaussian':
+                this.kernel = Kernels.gaussian(this.R);
+                break;
+            case 'mexicanHat':
+                this.kernel = Kernels.mexicanHat(this.R);
+                break;
+            case 'asymmetric':
+                this.kernel = Kernels.asymmetric(this.R, p.bias);
+                break;
+            case 'spiral':
+                this.kernel = Kernels.spiral(this.R, p.arms, p.tightness);
+                break;
+            case 'star':
+                this.kernel = Kernels.star(this.R, p.points, p.sharpness);
+                break;
+            case 'multiScale':
+                this.kernel = Kernels.multiScale(this.R, p.scales, p.weights);
+                break;
+            case 'anisotropic':
+                this.kernel = Kernels.anisotropic(this.R, p.angle, p.eccentricity);
+                break;
+            default:
+                this.kernel = Kernels.ring(this.R, this.peaks);
+        }
+    }
+
+    /**
+     * Growth function G(u) - same as standard Lenia
+     * In Flow-Lenia, this determines the "affinity" - where mass wants to flow
+     * Returns value in [-1, 1]: 1 = high affinity, -1 = low affinity
+     */
+    growth(u) {
+        const d = (u - this.mu) / this.sigma;
+        return 2 * Math.exp(-d * d / 2) - 1;
+    }
+
+    /**
+     * Compute neighborhood potential via convolution
+     * U = K * A (kernel convolved with activations)
+     */
+    computePotential() {
+        const { size, A, potential, kernel } = this;
+        const kSize = kernel.size;
+        const kRadius = kernel.radius;
+
+        potential.fill(0);
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                let sum = 0;
+
+                for (let ky = 0; ky < kSize; ky++) {
+                    for (let kx = 0; kx < kSize; kx++) {
+                        const kernelVal = kernel.data[ky * kSize + kx];
+                        if (kernelVal === 0) continue;
+
+                        // Toroidal wrapping
+                        const gx = (x + kx - kRadius + size) % size;
+                        const gy = (y + ky - kRadius + size) % size;
+
+                        sum += A[gy * size + gx] * kernelVal;
+                    }
+                }
+
+                potential[y * size + x] = sum;
+            }
+        }
+    }
+
+    /**
+     * Compute affinity map from potential using growth function
+     * Affinity = G(U) - this tells us where mass "wants" to be
+     */
+    computeAffinity() {
+        const { size, potential, affinity } = this;
+
+        for (let i = 0; i < size * size; i++) {
+            affinity[i] = this.growth(potential[i]);
+        }
+    }
+
+    /**
+     * Compute flow field using Sobel gradient estimation
+     * F = ∇(affinity) - gradient of affinity map
+     * Mass flows toward higher affinity (gradient ascent)
+     */
+    computeGradient() {
+        const { size, affinity, Fx, Fy, flowStrength } = this;
+
+        // Sobel kernels for gradient estimation
+        // Sobel X: [-1, 0, 1; -2, 0, 2; -1, 0, 1] / 8
+        // Sobel Y: [-1, -2, -1; 0, 0, 0; 1, 2, 1] / 8
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                // Sample 3x3 neighborhood with toroidal wrapping
+                const xm = (x - 1 + size) % size;
+                const xp = (x + 1) % size;
+                const ym = (y - 1 + size) % size;
+                const yp = (y + 1) % size;
+
+                // Get affinity values at 8 neighbors + center
+                const a_tl = affinity[ym * size + xm];  // top-left
+                const a_tc = affinity[ym * size + x];   // top-center
+                const a_tr = affinity[ym * size + xp];  // top-right
+                const a_ml = affinity[y * size + xm];   // middle-left
+                const a_mr = affinity[y * size + xp];   // middle-right
+                const a_bl = affinity[yp * size + xm];  // bottom-left
+                const a_bc = affinity[yp * size + x];   // bottom-center
+                const a_br = affinity[yp * size + xp];  // bottom-right
+
+                // Sobel gradient (note: we want gradient ascent, so positive toward higher values)
+                const gx = (-a_tl + a_tr - 2*a_ml + 2*a_mr - a_bl + a_br) / 8;
+                const gy = (-a_tl - 2*a_tc - a_tr + a_bl + 2*a_bc + a_br) / 8;
+
+                const idx = y * size + x;
+                Fx[idx] = gx * flowStrength;
+                Fy[idx] = gy * flowStrength;
+            }
+        }
+    }
+
+    /**
+     * Apply Laplacian diffusion to spread mass slightly
+     * This is mass-conservative: each cell shares a fraction of its mass with neighbors
+     * We ensure no cell goes negative by limiting how much mass can leave
+     */
+    applyDiffusion() {
+        const { size, A, newA, diffusion } = this;
+
+        if (diffusion <= 0) return;
+
+        // Copy current state
+        for (let i = 0; i < size * size; i++) {
+            newA[i] = A[i];
+        }
+
+        // Each cell shares a small fraction of its mass with its 4 neighbors
+        // This is guaranteed mass-conservative: mass only moves, never created/destroyed
+        const shareRate = diffusion * 0.1; // Fraction of mass to share with each neighbor
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const idx = y * size + x;
+                const mass = A[idx];
+
+                if (mass < 0.0001) continue;
+
+                // Amount to share with each of 4 neighbors
+                const shareAmount = mass * shareRate;
+                const totalShared = shareAmount * 4;
+
+                // Get neighbor indices with toroidal wrapping
+                const xm = (x - 1 + size) % size;
+                const xp = (x + 1) % size;
+                const ym = (y - 1 + size) % size;
+                const yp = (y + 1) % size;
+
+                // Remove mass from this cell
+                newA[idx] -= totalShared;
+
+                // Add mass to neighbors
+                newA[y * size + xm] += shareAmount;
+                newA[y * size + xp] += shareAmount;
+                newA[ym * size + x] += shareAmount;
+                newA[yp * size + x] += shareAmount;
+            }
+        }
+
+        // Copy back - values should never be negative with this approach
+        for (let i = 0; i < size * size; i++) {
+            A[i] = Math.max(0, newA[i]);
+        }
+    }
+
+    /**
+     * Transport mass using Reintegration Tracking
+     * This is the key to mass conservation - instead of adding/subtracting mass,
+     * we move existing mass according to the flow field.
+     *
+     * For each cell:
+     * 1. Compute destination = position + flow * dt
+     * 2. Distribute mass bilinearly to the 4 neighboring target cells
+     * 3. Sum all incoming mass
+     */
+    transportMass() {
+        const { size, A, newA, Fx, Fy, dt } = this;
+
+        newA.fill(0);
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const idx = y * size + x;
+                const mass = A[idx];
+
+                if (mass < 0.0001) continue; // Skip near-zero cells for efficiency
+
+                // Compute destination position
+                const fx = Fx[idx];
+                const fy = Fy[idx];
+
+                // Flow destination (where mass wants to go)
+                const destX = x + fx * dt;
+                const destY = y + fy * dt;
+
+                // Bilinear interpolation coordinates
+                const x0 = Math.floor(destX);
+                const y0 = Math.floor(destY);
+                const fx_frac = destX - x0;
+                const fy_frac = destY - y0;
+
+                // Toroidal wrapping for all 4 target cells
+                const x0w = ((x0 % size) + size) % size;
+                const x1w = ((x0 + 1) % size + size) % size;
+                const y0w = ((y0 % size) + size) % size;
+                const y1w = ((y0 + 1) % size + size) % size;
+
+                // Distribute mass bilinearly (exactly conserves total mass)
+                const w00 = (1 - fx_frac) * (1 - fy_frac);
+                const w10 = fx_frac * (1 - fy_frac);
+                const w01 = (1 - fx_frac) * fy_frac;
+                const w11 = fx_frac * fy_frac;
+
+                newA[y0w * size + x0w] += mass * w00;
+                newA[y0w * size + x1w] += mass * w10;
+                newA[y1w * size + x0w] += mass * w01;
+                newA[y1w * size + x1w] += mass * w11;
+            }
+        }
+
+        // Copy result back to main grid
+        // Only clamp negative values (shouldn't happen, but prevents numerical issues)
+        // Do NOT clamp upper bound - mass can concentrate above 1.0 and that's fine
+        // The rendering will handle values > 1 by clamping only for display
+        for (let i = 0; i < size * size; i++) {
+            A[i] = Math.max(0, newA[i]);
+        }
+    }
+
+    /**
+     * Main simulation step
+     */
+    step() {
+        this.computePotential();   // U = K * A
+        this.computeAffinity();    // affinity = G(U)
+        this.computeGradient();    // F = ∇(affinity)
+        this.transportMass();      // Mass-conservative transport
+        this.applyDiffusion();     // Laplacian diffusion to prevent collapse
+    }
+
+    /**
+     * Calculate total mass (should remain constant!)
+     */
+    totalMass() {
+        let sum = 0;
+        for (let i = 0; i < this.A.length; i++) {
+            sum += this.A[i];
+        }
+        return sum;
+    }
+
+    /**
+     * Clear the grid
+     */
+    clear() {
+        this.A.fill(0);
+    }
+
+    /**
+     * Fill with random clumps (similar to standard Lenia)
+     */
+    randomize(density = 0.3, clumpiness = 0.5) {
+        const numClumps = Math.floor(this.size * this.size * density * 0.001);
+
+        this.clear();
+
+        for (let c = 0; c < numClumps; c++) {
+            const cx = Math.random() * this.size;
+            const cy = Math.random() * this.size;
+            const radius = 5 + Math.random() * 20;
+
+            for (let y = 0; y < this.size; y++) {
+                for (let x = 0; x < this.size; x++) {
+                    const dx = x - cx;
+                    const dy = y - cy;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < radius) {
+                        const value = (1 - dist / radius) * (0.5 + Math.random() * 0.5);
+                        const idx = y * this.size + x;
+                        this.A[idx] = Math.min(1, this.A[idx] + value * clumpiness);
+                    }
+                }
+            }
+        }
+
+        // Add some noise
+        for (let i = 0; i < this.A.length; i++) {
+            this.A[i] = Math.min(1, this.A[i] + Math.random() * 0.1);
+        }
+    }
+
+    /**
+     * Draw a blob at position (smooth circular brush)
+     */
+    drawBlob(x, y, radius, value = 1.0) {
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                const dist = Math.sqrt(dx * dx + dy * dy) / radius;
+                if (dist <= 1) {
+                    const gx = (Math.floor(x) + dx + this.size) % this.size;
+                    const gy = (Math.floor(y) + dy + this.size) % this.size;
+                    const idx = gy * this.size + gx;
+                    const brushVal = value * (1 - dist * dist);
+
+                    if (value > 0) {
+                        this.A[idx] = Math.min(1, this.A[idx] + brushVal * 0.3);
+                    } else {
+                        this.A[idx] = Math.max(0, this.A[idx] + brushVal * 0.3);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Load a species preset
+     */
+    loadSpecies(speciesKey) {
+        const species = Species[speciesKey];
+        if (!species) return;
+
+        this.R = species.params.R;
+        this.peaks = species.params.peaks || 1;
+        this.mu = species.params.mu;
+        this.sigma = species.params.sigma;
+        this.dt = species.params.dt;
+
+        // Flow-specific params
+        if (species.params.flowStrength !== undefined) {
+            this.flowStrength = species.params.flowStrength;
+        }
+        if (species.params.diffusion !== undefined) {
+            this.diffusion = species.params.diffusion;
+        }
+
+        // Kernel type
+        if (species.params.kernelType) {
+            this.kernelType = species.params.kernelType;
+        } else {
+            this.kernelType = 'ring';
+        }
+
+        // Kernel-specific params
+        if (species.params.kernelParams) {
+            Object.assign(this.kernelParams, species.params.kernelParams);
+        }
+
+        this.updateKernel();
+
+        // Place pattern at center
+        if (species.pattern) {
+            this.clear();
+            this.placePattern(
+                species.pattern,
+                Math.floor(this.size / 2),
+                Math.floor(this.size / 2)
+            );
+        }
+    }
+
+    /**
+     * Place a pattern onto the grid
+     */
+    placePattern(pattern, centerX, centerY) {
+        if (!pattern) return;
+
+        const patternH = pattern.length;
+        const patternW = pattern[0].length;
+        const startX = Math.floor(centerX - patternW / 2);
+        const startY = Math.floor(centerY - patternH / 2);
+
+        for (let py = 0; py < patternH; py++) {
+            for (let px = 0; px < patternW; px++) {
+                const gx = (startX + px + this.size) % this.size;
+                const gy = (startY + py + this.size) % this.size;
+                this.A[gy * this.size + gx] = pattern[py][px];
+            }
+        }
+    }
+
+    /**
+     * Resize the simulation grid
+     */
+    resize(newSize) {
+        if (newSize === this.size) return;
+
+        const oldA = this.A;
+        const oldSize = this.size;
+
+        this.size = newSize;
+        this.A = new Float32Array(newSize * newSize);
+        this.potential = new Float32Array(newSize * newSize);
+        this.affinity = new Float32Array(newSize * newSize);
+        this.Fx = new Float32Array(newSize * newSize);
+        this.Fy = new Float32Array(newSize * newSize);
+        this.newA = new Float32Array(newSize * newSize);
+
+        // Simple nearest-neighbor scaling
+        const scale = oldSize / newSize;
+        for (let y = 0; y < newSize; y++) {
+            for (let x = 0; x < newSize; x++) {
+                const ox = Math.min(Math.floor(x * scale), oldSize - 1);
+                const oy = Math.min(Math.floor(y * scale), oldSize - 1);
+                this.A[y * newSize + x] = oldA[oy * oldSize + ox];
+            }
+        }
+    }
+
+    /**
+     * Get color for a cell value using current color map
+     */
+    getColor(value) {
+        const colors = ColorMaps[this.colorMap] || ColorMaps.viridis;
+        const t = Math.max(0, Math.min(1, value));
+        const idx = t * (colors.length - 1);
+        const i = Math.floor(idx);
+        const f = idx - i;
+
+        if (i >= colors.length - 1) {
+            return colors[colors.length - 1];
+        }
+
+        // Linear interpolation between colors
+        const c1 = colors[i];
+        const c2 = colors[i + 1];
+        return [
+            Math.round(c1[0] + (c2[0] - c1[0]) * f),
+            Math.round(c1[1] + (c2[1] - c1[1]) * f),
+            Math.round(c1[2] + (c2[2] - c1[2]) * f)
+        ];
+    }
+
+    /**
+     * Get the grid (for compatibility with rendering code)
+     */
+    get grid() {
+        return this.A;
+    }
+
+    set grid(value) {
+        this.A = value;
+    }
+}

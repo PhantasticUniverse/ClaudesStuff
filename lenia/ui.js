@@ -14,9 +14,15 @@ let currentMode = 'single';
 // Multi-channel simulation instance
 let multiChannel = null;
 
+// Flow-Lenia instance and state
+let flowLenia = null;
+let useFlowLenia = false;
+let initialMass = 0;
+
 function initUI() {
-    // Initialize multi-channel and explorer systems
+    // Initialize multi-channel, flow-lenia, and explorer systems
     multiChannel = new MultiChannelLenia(256, 2);
+    flowLenia = new FlowLenia(256);
     initExplorer();
 
     // Mode tab switching
@@ -27,11 +33,49 @@ function initUI() {
         });
     });
 
+    // Flow-Lenia mode toggle buttons
+    document.getElementById('btn-standard-lenia').addEventListener('click', () => {
+        setFlowMode(false);
+    });
+
+    document.getElementById('btn-flow-lenia').addEventListener('click', () => {
+        setFlowMode(true);
+    });
+
+    // Flow parameter sliders
+    setupSlider('flow-strength', (value) => {
+        if (flowLenia) {
+            flowLenia.flowStrength = parseFloat(value);
+        }
+    });
+
+    setupSlider('flow-diffusion', (value) => {
+        if (flowLenia) {
+            flowLenia.diffusion = parseFloat(value);
+        }
+    });
+
     // Species select
     const speciesSelect = document.getElementById('species-select');
     speciesSelect.addEventListener('change', (e) => {
         if (e.target.value !== 'custom') {
-            lenia.loadSpecies(e.target.value);
+            const speciesKey = e.target.value;
+            const species = Species[speciesKey];
+
+            // Check if this is a flow species and switch mode accordingly
+            if (species && species.params.isFlowSpecies) {
+                setFlowMode(true);
+                flowLenia.loadSpecies(speciesKey);
+                initialMass = flowLenia.totalMass();
+            } else {
+                // For standard species, can use either mode
+                if (useFlowLenia) {
+                    flowLenia.loadSpecies(speciesKey);
+                    initialMass = flowLenia.totalMass();
+                } else {
+                    lenia.loadSpecies(speciesKey);
+                }
+            }
             generation = 0;
             syncUIToParams();
         }
@@ -59,8 +103,13 @@ function initUI() {
     const kernelTypeSelect = document.getElementById('kernel-type');
     kernelTypeSelect.addEventListener('change', (e) => {
         if (currentMode === 'single') {
-            lenia.kernelType = e.target.value;
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.kernelType = e.target.value;
+                flowLenia.updateKernel();
+            } else {
+                lenia.kernelType = e.target.value;
+                lenia.updateKernel();
+            }
         } else {
             const ch = multiChannel.activeChannel;
             multiChannel.channelParams[ch].kernelType = e.target.value;
@@ -74,8 +123,13 @@ function initUI() {
     // Kernel parameters
     setupSlider('kernel-radius', (value) => {
         if (currentMode === 'single') {
-            lenia.R = parseInt(value);
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.R = parseInt(value);
+                flowLenia.updateKernel();
+            } else {
+                lenia.R = parseInt(value);
+                lenia.updateKernel();
+            }
         } else {
             const ch = multiChannel.activeChannel;
             multiChannel.channelParams[ch].R = parseInt(value);
@@ -87,8 +141,13 @@ function initUI() {
 
     setupSlider('kernel-peaks', (value) => {
         if (currentMode === 'single') {
-            lenia.peaks = parseInt(value);
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.peaks = parseInt(value);
+                flowLenia.updateKernel();
+            } else {
+                lenia.peaks = parseInt(value);
+                lenia.updateKernel();
+            }
         } else {
             const ch = multiChannel.activeChannel;
             multiChannel.channelParams[ch].peaks = parseInt(value);
@@ -100,10 +159,16 @@ function initUI() {
 
     // Spiral params
     setupSlider('spiral-arms', (value) => {
-        const params = currentMode === 'single' ? lenia.kernelParams : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
+        const params = currentMode === 'single'
+            ? (useFlowLenia ? flowLenia.kernelParams : lenia.kernelParams)
+            : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
         params.arms = parseInt(value);
         if (currentMode === 'single') {
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.updateKernel();
+            } else {
+                lenia.updateKernel();
+            }
         } else {
             multiChannel.updateChannelKernel(multiChannel.activeChannel);
         }
@@ -112,10 +177,16 @@ function initUI() {
     });
 
     setupSlider('spiral-tightness', (value) => {
-        const params = currentMode === 'single' ? lenia.kernelParams : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
+        const params = currentMode === 'single'
+            ? (useFlowLenia ? flowLenia.kernelParams : lenia.kernelParams)
+            : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
         params.tightness = parseFloat(value);
         if (currentMode === 'single') {
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.updateKernel();
+            } else {
+                lenia.updateKernel();
+            }
         } else {
             multiChannel.updateChannelKernel(multiChannel.activeChannel);
         }
@@ -125,10 +196,16 @@ function initUI() {
 
     // Star params
     setupSlider('star-points', (value) => {
-        const params = currentMode === 'single' ? lenia.kernelParams : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
+        const params = currentMode === 'single'
+            ? (useFlowLenia ? flowLenia.kernelParams : lenia.kernelParams)
+            : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
         params.points = parseInt(value);
         if (currentMode === 'single') {
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.updateKernel();
+            } else {
+                lenia.updateKernel();
+            }
         } else {
             multiChannel.updateChannelKernel(multiChannel.activeChannel);
         }
@@ -137,10 +214,16 @@ function initUI() {
     });
 
     setupSlider('star-sharpness', (value) => {
-        const params = currentMode === 'single' ? lenia.kernelParams : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
+        const params = currentMode === 'single'
+            ? (useFlowLenia ? flowLenia.kernelParams : lenia.kernelParams)
+            : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
         params.sharpness = parseFloat(value);
         if (currentMode === 'single') {
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.updateKernel();
+            } else {
+                lenia.updateKernel();
+            }
         } else {
             multiChannel.updateChannelKernel(multiChannel.activeChannel);
         }
@@ -150,10 +233,16 @@ function initUI() {
 
     // Anisotropic params
     setupSlider('aniso-angle', (value) => {
-        const params = currentMode === 'single' ? lenia.kernelParams : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
+        const params = currentMode === 'single'
+            ? (useFlowLenia ? flowLenia.kernelParams : lenia.kernelParams)
+            : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
         params.angle = parseFloat(value) * Math.PI / 180;
         if (currentMode === 'single') {
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.updateKernel();
+            } else {
+                lenia.updateKernel();
+            }
         } else {
             multiChannel.updateChannelKernel(multiChannel.activeChannel);
         }
@@ -162,10 +251,16 @@ function initUI() {
     });
 
     setupSlider('aniso-eccentricity', (value) => {
-        const params = currentMode === 'single' ? lenia.kernelParams : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
+        const params = currentMode === 'single'
+            ? (useFlowLenia ? flowLenia.kernelParams : lenia.kernelParams)
+            : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
         params.eccentricity = parseFloat(value);
         if (currentMode === 'single') {
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.updateKernel();
+            } else {
+                lenia.updateKernel();
+            }
         } else {
             multiChannel.updateChannelKernel(multiChannel.activeChannel);
         }
@@ -175,10 +270,16 @@ function initUI() {
 
     // Asymmetric bias
     setupSlider('asymmetric-bias', (value) => {
-        const params = currentMode === 'single' ? lenia.kernelParams : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
+        const params = currentMode === 'single'
+            ? (useFlowLenia ? flowLenia.kernelParams : lenia.kernelParams)
+            : multiChannel.channelParams[multiChannel.activeChannel].kernelParams;
         params.bias = parseFloat(value);
         if (currentMode === 'single') {
-            lenia.updateKernel();
+            if (useFlowLenia) {
+                flowLenia.updateKernel();
+            } else {
+                lenia.updateKernel();
+            }
         } else {
             multiChannel.updateChannelKernel(multiChannel.activeChannel);
         }
@@ -189,7 +290,11 @@ function initUI() {
     // Growth function parameters
     setupSlider('growth-mu', (value) => {
         if (currentMode === 'single') {
-            lenia.mu = parseFloat(value);
+            if (useFlowLenia) {
+                flowLenia.mu = parseFloat(value);
+            } else {
+                lenia.mu = parseFloat(value);
+            }
         } else {
             multiChannel.channelParams[multiChannel.activeChannel].mu = parseFloat(value);
         }
@@ -198,7 +303,11 @@ function initUI() {
 
     setupSlider('growth-sigma', (value) => {
         if (currentMode === 'single') {
-            lenia.sigma = parseFloat(value);
+            if (useFlowLenia) {
+                flowLenia.sigma = parseFloat(value);
+            } else {
+                lenia.sigma = parseFloat(value);
+            }
         } else {
             multiChannel.channelParams[multiChannel.activeChannel].sigma = parseFloat(value);
         }
@@ -208,7 +317,11 @@ function initUI() {
     // Simulation parameters
     setupSlider('dt', (value) => {
         if (currentMode === 'single') {
-            lenia.dt = parseFloat(value);
+            if (useFlowLenia) {
+                flowLenia.dt = parseFloat(value);
+            } else {
+                lenia.dt = parseFloat(value);
+            }
         } else {
             multiChannel.dt = parseFloat(value);
         }
@@ -218,6 +331,7 @@ function initUI() {
     setupSlider('grid-size', (value) => {
         const newSize = parseInt(value);
         lenia.resize(newSize);
+        flowLenia.resize(newSize);
         // Also resize multi-channel if needed
         if (multiChannel.size !== newSize) {
             multiChannel = new MultiChannelLenia(newSize, multiChannel.numChannels);
@@ -246,6 +360,9 @@ function initUI() {
         document.getElementById('btn-pause').textContent = 'Resume';
         if (currentMode === 'ecosystem') {
             multiChannel.step();
+        } else if (useFlowLenia) {
+            flowLenia.step();
+            updateMassStats();
         } else {
             lenia.step();
         }
@@ -258,6 +375,10 @@ function initUI() {
             multiChannel.loadEcosystem(ecosystemSelect.value);
         } else {
             resetSimulation();
+            if (useFlowLenia) {
+                initialMass = flowLenia.totalMass();
+                updateMassStats();
+            }
         }
         generation = 0;
     });
@@ -265,6 +386,10 @@ function initUI() {
     document.getElementById('btn-clear').addEventListener('click', () => {
         if (currentMode === 'ecosystem') {
             multiChannel.clear();
+        } else if (useFlowLenia) {
+            flowLenia.clear();
+            initialMass = 0;
+            updateMassStats();
         } else {
             lenia.clear();
         }
@@ -274,6 +399,10 @@ function initUI() {
     document.getElementById('btn-random').addEventListener('click', () => {
         if (currentMode === 'ecosystem') {
             multiChannel.randomize();
+        } else if (useFlowLenia) {
+            flowLenia.randomize();
+            initialMass = flowLenia.totalMass();
+            updateMassStats();
         } else {
             lenia.randomize();
         }
@@ -384,6 +513,99 @@ function switchMode(mode) {
         multiChannel.loadEcosystem(ecosystemSelect.value);
         updateInteractionMatrix();
         updateChannelTabs();
+    }
+}
+
+/**
+ * Toggle between Standard Lenia and Flow-Lenia modes
+ */
+function setFlowMode(enabled) {
+    useFlowLenia = enabled;
+
+    // Update button states
+    const btnStandard = document.getElementById('btn-standard-lenia');
+    const btnFlow = document.getElementById('btn-flow-lenia');
+    const flowIndicator = document.getElementById('flow-indicator');
+    const flowParamsSection = document.getElementById('flow-params-section');
+
+    if (enabled) {
+        btnStandard.classList.remove('primary');
+        btnFlow.classList.add('primary');
+        flowIndicator.style.display = 'block';
+        flowParamsSection.style.display = 'block';
+
+        // Copy current state from standard lenia to flow lenia if needed
+        if (flowLenia.totalMass() === 0 && lenia.totalMass() > 0) {
+            // Transfer the grid
+            for (let i = 0; i < lenia.grid.length && i < flowLenia.A.length; i++) {
+                flowLenia.A[i] = lenia.grid[i];
+            }
+            // Copy parameters
+            flowLenia.R = lenia.R;
+            flowLenia.peaks = lenia.peaks;
+            flowLenia.mu = lenia.mu;
+            flowLenia.sigma = lenia.sigma;
+            flowLenia.dt = lenia.dt;
+            flowLenia.kernelType = lenia.kernelType;
+            flowLenia.kernelParams = { ...lenia.kernelParams };
+            flowLenia.updateKernel();
+        }
+
+        // Record initial mass for conservation tracking
+        initialMass = flowLenia.totalMass();
+        updateMassStats();
+    } else {
+        btnStandard.classList.add('primary');
+        btnFlow.classList.remove('primary');
+        flowIndicator.style.display = 'none';
+        flowParamsSection.style.display = 'none';
+
+        // Copy current state from flow lenia to standard lenia if needed
+        if (lenia.totalMass() === 0 && flowLenia.totalMass() > 0) {
+            for (let i = 0; i < flowLenia.A.length && i < lenia.grid.length; i++) {
+                lenia.grid[i] = flowLenia.A[i];
+            }
+            // Copy parameters
+            lenia.R = flowLenia.R;
+            lenia.peaks = flowLenia.peaks;
+            lenia.mu = flowLenia.mu;
+            lenia.sigma = flowLenia.sigma;
+            lenia.dt = flowLenia.dt;
+            lenia.kernelType = flowLenia.kernelType;
+            lenia.kernelParams = { ...flowLenia.kernelParams };
+            lenia.updateKernel();
+        }
+    }
+
+    generation = 0;
+    syncUIToParams();
+}
+
+/**
+ * Update mass conservation statistics display
+ */
+function updateMassStats() {
+    if (!useFlowLenia) return;
+
+    const currentMass = flowLenia.totalMass();
+    const delta = initialMass > 0 ? ((currentMass - initialMass) / initialMass * 100) : 0;
+
+    const initialEl = document.getElementById('stat-initial-mass');
+    const currentEl = document.getElementById('stat-current-mass');
+    const deltaEl = document.getElementById('stat-mass-delta');
+
+    if (initialEl) initialEl.textContent = initialMass.toFixed(1);
+    if (currentEl) currentEl.textContent = currentMass.toFixed(1);
+    if (deltaEl) {
+        deltaEl.textContent = (delta >= 0 ? '+' : '') + delta.toFixed(2) + '%';
+        // Color based on conservation quality
+        if (Math.abs(delta) < 0.1) {
+            deltaEl.style.color = '#5f5';  // Green - excellent
+        } else if (Math.abs(delta) < 1) {
+            deltaEl.style.color = '#ff5';  // Yellow - acceptable
+        } else {
+            deltaEl.style.color = '#f55';  // Red - poor
+        }
     }
 }
 
@@ -505,21 +727,24 @@ function setSpeciesCustom() {
  * Sync UI controls to current Lenia parameters
  */
 function syncUIToParams() {
-    setSliderValue('kernel-radius', lenia.R);
-    setSliderValue('kernel-peaks', lenia.peaks);
-    setSliderValue('growth-mu', lenia.mu);
-    setSliderValue('growth-sigma', lenia.sigma);
-    setSliderValue('dt', lenia.dt);
-    setSliderValue('grid-size', lenia.size);
+    // Use flow lenia params if in flow mode
+    const sim = useFlowLenia ? flowLenia : lenia;
+
+    setSliderValue('kernel-radius', sim.R);
+    setSliderValue('kernel-peaks', sim.peaks);
+    setSliderValue('growth-mu', sim.mu);
+    setSliderValue('growth-sigma', sim.sigma);
+    setSliderValue('dt', sim.dt);
+    setSliderValue('grid-size', sim.size);
 
     // Sync kernel type
     const kernelTypeSelect = document.getElementById('kernel-type');
     if (kernelTypeSelect) {
-        kernelTypeSelect.value = lenia.kernelType;
+        kernelTypeSelect.value = sim.kernelType;
     }
 
     // Sync kernel-specific params
-    const p = lenia.kernelParams;
+    const p = sim.kernelParams;
     setSliderValue('spiral-arms', p.arms);
     setSliderValue('spiral-tightness', p.tightness);
     setSliderValue('star-points', p.points);
@@ -527,6 +752,12 @@ function syncUIToParams() {
     setSliderValue('aniso-angle', (p.angle * 180 / Math.PI));
     setSliderValue('aniso-eccentricity', p.eccentricity);
     setSliderValue('asymmetric-bias', p.bias);
+
+    // Sync flow-specific params
+    if (useFlowLenia) {
+        setSliderValue('flow-strength', flowLenia.flowStrength);
+        setSliderValue('flow-diffusion', flowLenia.diffusion);
+    }
 
     // Update visibility and preview
     updateKernelParamsVisibility();
@@ -554,7 +785,7 @@ function setSliderValue(id, value) {
 function updateKernelParamsVisibility() {
     let type;
     if (currentMode === 'single') {
-        type = lenia.kernelType;
+        type = useFlowLenia ? flowLenia.kernelType : lenia.kernelType;
     } else {
         type = multiChannel.channelParams[multiChannel.activeChannel].kernelType;
     }
@@ -604,8 +835,13 @@ function updateKernelPreview() {
 
     let kernel;
     if (currentMode === 'single') {
-        if (!lenia || !lenia.kernel) return;
-        kernel = lenia.kernel;
+        if (useFlowLenia) {
+            if (!flowLenia || !flowLenia.kernel) return;
+            kernel = flowLenia.kernel;
+        } else {
+            if (!lenia || !lenia.kernel) return;
+            kernel = lenia.kernel;
+        }
     } else {
         const ch = multiChannel.activeChannel;
         if (!multiChannel.channelParams[ch].kernel) return;
