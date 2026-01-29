@@ -493,14 +493,22 @@ class FlowLenia {
             // Phase 5: Evolution - update energy and check for events
             if (this.creatureTracker.evolution.enabled) {
                 // Assign genomes to any creatures that don't have one
-                for (const creature of this.creatureTracker.creatures) {
-                    if (!creature.genome) {
-                        this.creatureTracker.assignDefaultGenome(creature);
+                // Phase 10: In ecosystem mode, use ecosystem genome assignment instead
+                if (this.creatureTracker.ecosystemMode) {
+                    this.creatureTracker.assignEcosystemGenomes();
+                } else {
+                    for (const creature of this.creatureTracker.creatures) {
+                        if (!creature.genome) {
+                            this.creatureTracker.assignDefaultGenome(creature);
+                        }
                     }
                 }
 
                 // Update energy (metabolism + food consumption)
                 this.creatureTracker.updateEnergy(this.environment);
+
+                // Phase 10: Process predation (hunters eat prey)
+                this.creatureTracker.processPredation(this.A, this.size);
 
                 // Check for reproduction and death
                 const events = this.creatureTracker.checkEvolutionEvents();
@@ -519,6 +527,9 @@ class FlowLenia {
                 for (const parent of events.reproduce) {
                     this.processReproduction(parent);
                 }
+
+                // Phase 10: Balance population in ecosystem mode
+                this.creatureTracker.balancePopulation(this);
 
                 // Update statistics
                 this.creatureTracker.updateStats();

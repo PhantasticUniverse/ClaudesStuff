@@ -31,6 +31,7 @@ let evolutionEnabled = false;
 let showFoodOverlay = true;
 let showPheromoneOverlay = false;
 let showHeadingsOverlay = false;
+let showSensorsOverlay = false;
 
 function initUI() {
     // Initialize multi-channel, flow-lenia, and explorer systems
@@ -193,6 +194,12 @@ function initUI() {
         btn.classList.toggle('primary', showHeadingsOverlay);
     });
 
+    document.getElementById('btn-show-sensors').addEventListener('click', () => {
+        showSensorsOverlay = !showSensorsOverlay;
+        const btn = document.getElementById('btn-show-sensors');
+        btn.classList.toggle('primary', showSensorsOverlay);
+    });
+
     // Phase 5: Evolution mode toggle
     document.getElementById('btn-evolution-off').addEventListener('click', () => {
         setEvolutionMode(false);
@@ -200,6 +207,34 @@ function initUI() {
 
     document.getElementById('btn-evolution-on').addEventListener('click', () => {
         setEvolutionMode(true);
+    });
+
+    // Phase 10: Spawn Ecosystem button
+    document.getElementById('btn-spawn-ecosystem').addEventListener('click', () => {
+        if (flowLenia && creatureTracker) {
+            // Clear and setup
+            flowLenia.clear();
+            environment.reset();
+            environment.initializeFood();
+
+            // Spawn mixed ecosystem
+            creatureTracker.spawnEcosystem(flowLenia, 2, 6);
+            initialMass = flowLenia.totalMass();
+
+            // Enable flow mode and sensory mode if not already
+            if (!useFlowLenia) {
+                setFlowMode(true);
+            }
+            if (!sensoryEnabled) {
+                setSensoryMode(true);
+            }
+            if (!evolutionEnabled) {
+                setEvolutionMode(true);
+            }
+
+            generation = 0;
+            updateMassStats();
+        }
     });
 
     // Phase 5: Evolution controls
@@ -1152,12 +1187,25 @@ function updateEvolutionStats() {
     const birthsEl = document.getElementById('stat-births');
     const deathsEl = document.getElementById('stat-deaths');
 
+    // Phase 10: Hunter/Prey/Predation stats
+    const huntersEl = document.getElementById('stat-hunters');
+    const preyEl = document.getElementById('stat-prey');
+    const predationsEl = document.getElementById('stat-predations');
+
     if (populationEl) populationEl.textContent = creatureTracker.count;
     if (highestGenEl) highestGenEl.textContent = stats.highestGeneration;
     if (avgGenEl) avgGenEl.textContent = stats.averageGeneration.toFixed(1);
     if (avgEnergyEl) avgEnergyEl.textContent = stats.averageEnergy.toFixed(1);
     if (birthsEl) birthsEl.textContent = stats.totalBirths;
     if (deathsEl) deathsEl.textContent = stats.totalDeaths;
+
+    // Phase 10: Count hunters and prey
+    const hunters = creatureTracker.creatures.filter(c => c.genome?.isPredator).length;
+    const prey = creatureTracker.creatures.filter(c => c.genome && !c.genome.isPredator).length;
+
+    if (huntersEl) huntersEl.textContent = hunters;
+    if (preyEl) preyEl.textContent = prey;
+    if (predationsEl) predationsEl.textContent = stats.predationEvents || 0;
 
     // Trait averages
     const traits = stats.traitAverages;

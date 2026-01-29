@@ -6,7 +6,7 @@ Creative coding experiments with Claude. Focus: artificial life, generative art,
 
 Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-### Status: Phase 8 Complete
+### Status: Phase 10 Complete
 
 1. Core Lenia with multiple kernel types
 2. Multi-channel ecosystems
@@ -15,7 +15,9 @@ Interactive web-based Lenia - continuous cellular automata producing lifelike cr
 5. Evolving creatures - genome inheritance, energy system, reproduction
 6. Morphology evolution - kernel parameters (R, μ, σ) are heritable traits
 7. Directional creatures - kernel bias creates asymmetric, oriented creatures
-8. **Asymmetric sensing** - creatures detect stimuli directionally (forward/backward focus)
+8. Asymmetric sensing - creatures detect stimuli directionally (forward/backward focus)
+9. Sensor cone visualization - visual representation of creature sensing
+10. **Predator-Prey Ecosystem** - mixed populations of hunters and prey with predation mechanics
 
 ### Key Files
 
@@ -238,3 +240,57 @@ Effects are most visible when:
 - Evolution enabled with high mutation rate (0.15+)
 - Mixed population of hunters and prey
 - "Avg Focus" stat in Evolution Statistics shows population average
+
+---
+
+## Reflections (Phase 10)
+
+### Predator-Prey Ecosystem Mode
+
+Phase 10 introduces a "Spawn Ecosystem" button that creates mixed populations of hunters and prey. The key additions:
+
+- **Ecosystem mode**: Tracks hunters and prey separately with distinct genomes
+- **Predation mechanic**: When hunters overlap prey, prey is consumed and hunter gains energy
+- **Population balance**: If all hunters die, new hunters respawn; same for prey
+- **Visual differentiation**: Hunters have red sensor cones (forward), prey have blue cones (backward)
+
+### Implementation Challenges
+
+**Genome Assignment Ordering**: Initially, creatures were assigned default genomes before ecosystem genomes could be applied. Fixed by checking `ecosystemMode` first in the evolution step and using a separate `assignEcosystemGenomes()` method.
+
+**Creature Size Detection**: In Flow-Lenia, blobs can merge and split unpredictably. Rather than detecting hunters by mass (unreliable after merging), we track pending hunter/prey counts from the initial spawn and assign the largest unassigned creatures as hunters.
+
+**Predation Difficulty**: Prey have negative social weight (-0.8) and backward sensing, making them effective at evasion. Hunters have positive social weight (1.5) and forward sensing for pursuit. This creates realistic predator-prey dynamics where catching prey is challenging.
+
+### Energy Balance for Hunters
+
+Hunters face unique challenges:
+- They can't eat food (foodWeight: 0.0)
+- Higher metabolism (0.03 vs 0.025 for prey)
+- Must catch prey to survive
+
+To compensate:
+- Hunters receive 2x starting energy (mass * 1.0 vs mass * 0.5)
+- Predation energy gain is set high (1.5x prey mass)
+- Catch radius is generous (sum of both radii)
+
+### Observing Ecosystem Dynamics
+
+The "Spawn Ecosystem" button creates:
+- 2 hunters (larger blobs, red forward cones)
+- 6 prey (smaller blobs, blue backward cones)
+
+Evolution Statistics panel shows:
+- Hunters / Prey counts
+- Predation events counter
+- Trait averages reflecting the mixed population
+
+### Emergent Behaviors
+
+In practice:
+- Prey successfully evade due to backward sensing
+- Hunters pursue but catching is difficult
+- Prey population can explode if hunters fail
+- Population balance respawns extinct species
+
+This creates authentic ecological dynamics where predation is challenging and prey have realistic escape behaviors.

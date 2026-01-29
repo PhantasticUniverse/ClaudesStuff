@@ -224,8 +224,14 @@ class CreatureTracker {
             reproductionThreshold: 50, // Default energy to reproduce
             maxPopulation: 30,        // Maximum creatures allowed
             deathBecomesFood: true,   // Dead creature mass becomes food
-            minCreatureEnergy: 10     // Minimum energy for new creatures
+            minCreatureEnergy: 10,    // Minimum energy for new creatures
+            predationEnergy: 1.5      // Phase 10: Energy gained per unit prey mass consumed (higher to sustain hunters)
         };
+
+        // Phase 10: Ecosystem mode
+        this.ecosystemMode = false;
+        this.hunterGenome = null;     // Base genome for hunters
+        this.preyGenome = null;       // Base genome for prey
 
         // Evolution statistics
         this.stats = {
@@ -235,7 +241,8 @@ class CreatureTracker {
             averageEnergy: 0,
             averageGeneration: 0,
             populationHistory: [],     // Track population over time
-            traitAverages: {}          // Average genome values
+            traitAverages: {},         // Average genome values
+            predationEvents: 0         // Phase 10: Number of successful hunts
         };
 
         // Pending reproduction events (processed after detection)
@@ -1048,8 +1055,196 @@ class CreatureTracker {
             averageEnergy: 0,
             averageGeneration: 0,
             populationHistory: [],
-            traitAverages: {}
+            traitAverages: {},
+            predationEvents: 0
         };
+    }
+
+    // ==================== Phase 10: Predator-Prey Ecosystem ====================
+
+    /**
+     * Process predation - hunters eat prey on contact
+     * @param {Float32Array} grid - The Lenia mass field (for removing prey mass)
+     * @param {number} size - Grid size
+     */
+    processPredation(grid, size) {
+        if (!this.ecosystemMode) return;
+
+        const hunters = this.creatures.filter(c => c.genome?.isPredator);
+        const prey = this.creatures.filter(c => c.genome && !c.genome.isPredator);
+        const eaten = new Set();
+
+        for (const hunter of hunters) {
+            for (const preyCreature of prey) {
+                if (eaten.has(preyCreature.id)) continue;
+
+                const dist = this.toroidalDistance(
+                    hunter.x, hunter.y,
+                    preyCreature.x, preyCreature.y
+                );
+
+                // Catch radius based on both creature sizes (generous to allow predation)
+                const catchRadius = (hunter.radius + preyCreature.radius) * 1.0;
+
+                if (dist < catchRadius) {
+                    // Predation! Hunter eats prey
+                    hunter.energy += preyCreature.mass * this.evolution.predationEnergy;
+                    eaten.add(preyCreature.id);
+                    this.stats.predationEvents++;
+
+                    // Remove prey mass from the grid
+                    for (const cell of preyCreature.cells) {
+                        const idx = Math.floor(cell.y) * size + Math.floor(cell.x);
+                        if (idx >= 0 && idx < grid.length) {
+                            grid[idx] = 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remove eaten prey from creature list
+        if (eaten.size > 0) {
+            this.creatures = this.creatures.filter(c => !eaten.has(c.id));
+            this.stats.totalDeaths += eaten.size;
+        }
+    }
+
+    /**
+     * Spawn a mixed ecosystem with hunters and prey
+     * @param {FlowLenia} flowLenia - Flow-Lenia simulation instance
+     * @param {number} numHunters - Number of hunters to spawn (default 2)
+     * @param {number} numPrey - Number of prey to spawn (default 6)
+     */
+    spawnEcosystem(flowLenia, numHunters = 2, numPrey = 6) {
+        const size = flowLenia.size;
+
+        // Create base genomes from species presets
+        this.hunterGenome = new Genome(Species.hunter.params.genome);
+        this.preyGenome = new Genome(Species.prey.params.genome);
+
+        // Clear existing creatures
+        this.creatures = [];
+        this.ecosystemMode = true;
+
+        // Track spawned positions to avoid overlap
+        const positions = [];
+
+        const getSpawnPosition = (minDist = 40) => {
+            for (let attempts = 0; attempts < 50; attempts++) {
+                const x = Math.random() * size;
+                const y = Math.random() * size;
+                let valid = true;
+
+                for (const pos of positions) {
+                    if (this.toroidalDistance(x, y, pos.x, pos.y) < minDist) {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (valid) {
+                    positions.push({ x, y });
+                    return { x, y };
+                }
+            }
+            // Fallback if can't find good position
+            const x = Math.random() * size;
+            const y = Math.random() * size;
+            positions.push({ x, y });
+            return { x, y };
+        };
+
+        // Spawn hunters (larger blobs)
+        for (let i = 0; i < numHunters; i++) {
+            const pos = getSpawnPosition(50);
+            flowLenia.drawBlob(pos.x, pos.y, 14, 0.9);
+        }
+
+        // Spawn prey (smaller blobs, more spread out)
+        for (let i = 0; i < numPrey; i++) {
+            const pos = getSpawnPosition(30);
+            flowLenia.drawBlob(pos.x, pos.y, 10, 0.85);
+        }
+
+        // Store expected counts for genome assignment
+        this._pendingHunters = numHunters;
+        this._pendingPrey = numPrey;
+    }
+
+    /**
+     * Assign genomes to newly detected creatures in ecosystem mode
+     * Uses pending hunter/prey counts to assign largest creatures as hunters
+     */
+    assignEcosystemGenomes() {
+        if (!this.ecosystemMode) return;
+
+        // Sort creatures by mass (largest first)
+        const unassigned = this.creatures.filter(c => !c.genome);
+        if (unassigned.length === 0) return;
+
+        unassigned.sort((a, b) => b.mass - a.mass);
+
+        // Count how many hunters and prey we currently have
+        const currentHunters = this.creatures.filter(c => c.genome?.isPredator).length;
+        const currentPrey = this.creatures.filter(c => c.genome && !c.genome.isPredator).length;
+
+        // Use pending counts if available (initial spawn)
+        let huntersNeeded = (this._pendingHunters || 0) - currentHunters;
+        let preyNeeded = (this._pendingPrey || 0) - currentPrey;
+
+        // Clear pending counts after first assignment
+        if (this._pendingHunters !== undefined) {
+            this._pendingHunters = 0;
+            this._pendingPrey = 0;
+        }
+
+        for (const creature of unassigned) {
+            // Assign largest unassigned creatures as hunters first
+            if (huntersNeeded > 0 && this.hunterGenome) {
+                creature.genome = this.hunterGenome.clone();
+                huntersNeeded--;
+                // Hunters get more starting energy since they can't eat food
+                creature.energy = this.evolution.minCreatureEnergy + creature.mass * 1.0;
+            } else if (this.preyGenome) {
+                creature.genome = this.preyGenome.clone();
+                creature.energy = this.evolution.minCreatureEnergy + creature.mass * 0.5;
+            } else {
+                // Fallback
+                this.assignDefaultGenome(creature);
+                creature.energy = this.evolution.minCreatureEnergy + creature.mass * 0.5;
+            }
+        }
+    }
+
+    /**
+     * Check and maintain population balance in ecosystem mode
+     * Respawns species if they go extinct
+     * @param {FlowLenia} flowLenia - Flow-Lenia instance for spawning
+     */
+    balancePopulation(flowLenia) {
+        if (!this.ecosystemMode || !this.evolution.enabled) return;
+
+        const hunters = this.creatures.filter(c => c.genome?.isPredator);
+        const prey = this.creatures.filter(c => c.genome && !c.genome.isPredator);
+        const size = flowLenia.size;
+
+        // Respawn prey if extinct (and hunters exist)
+        if (prey.length === 0 && hunters.length > 0) {
+            // Spawn 2 new prey at random locations
+            for (let i = 0; i < 2; i++) {
+                const x = Math.random() * size;
+                const y = Math.random() * size;
+                flowLenia.drawBlob(x, y, 10, 0.85);
+            }
+        }
+
+        // Respawn hunter if extinct (and prey exist)
+        if (hunters.length === 0 && prey.length > 0) {
+            const x = Math.random() * size;
+            const y = Math.random() * size;
+            flowLenia.drawBlob(x, y, 14, 0.9);
+        }
     }
 
     /**
