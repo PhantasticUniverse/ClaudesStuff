@@ -754,7 +754,8 @@ function drawFlockLinks() {
 
             if (dist < flockRadius && dist > 5) {
                 // Draw link with alpha based on distance (closer = stronger)
-                const alpha = Math.floor(80 * (1 - dist / flockRadius));
+                // Base alpha of 40, plus up to 120 more for close neighbors
+                const alpha = Math.floor(40 + 120 * (1 - dist / flockRadius));
                 stroke(100, 200, 255, alpha);
 
                 const otherScreenX = creature.x * cellSize + dx * cellSize;

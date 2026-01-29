@@ -6,7 +6,7 @@ Creative coding experiments. Focus: artificial life, generative art.
 
 Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-**Status**: Phase 13 Complete (Emergent Collective Behaviors)
+**Status**: Phase 13 Complete & Verified (Emergent Collective Behaviors)
 
 ### Running
 

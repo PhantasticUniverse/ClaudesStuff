@@ -15,6 +15,7 @@ The simulation creates emergent behaviors including:
 - Movement and locomotion via asymmetric kernels
 - Predator-prey ecosystems with natural selection
 - Bioluminescent visual signaling (Phase 12)
+- Emergent collective behaviors: flocking, pack hunting, homing (Phase 13)
 
 ## File Structure
 
@@ -140,6 +141,13 @@ class Genome {
     alarmSensitivity, huntingSensitivity
     matingSensitivity, territorySensitivity
     signalEmissionRate
+
+    // Collective Behavior (Phase 13)
+    alignmentWeight     // Strength of heading alignment with neighbors (0-1)
+    flockingRadius      // Distance to consider neighbors (15-50 pixels)
+    packCoordination    // Flanking vs direct chase preference (0-1)
+    territoryRadius     // Size of defended home area (0-80 pixels)
+    homingStrength      // Pull toward birthplace (0-0.5)
 
     // Methods
     mutate(rate)    // Create mutated offspring
@@ -325,7 +333,7 @@ mySpecies: {
 | Alarm | Red/Orange | Prey detects nearby hunter | Other prey flee |
 | Hunting | Magenta | Hunter catches prey | Hunters converge |
 | Mating | Cyan/Blue | Energy > 80% reproduction threshold | Attracts mates |
-| Territory | Green | (Not currently auto-emitted) | Spacing behavior |
+| Territory | Green | Inside core territory (Phase 13) | Spacing behavior |
 
 ### Signal Lifecycle
 
@@ -340,6 +348,59 @@ mySpecies: {
 - Field overlays show signal intensity as colored tints
 - Creature glow effect shows recent signal emissions
 - Colors: alarm=red/orange, hunting=magenta, mating=cyan, territory=green
+
+## Collective Behaviors (Phase 13)
+
+### Flocking/Schooling (Prey)
+
+Boids-inspired alignment where prey match headings with nearby neighbors:
+
+```javascript
+// In computeSensoryInput() for non-hunters
+if (!creature.isHunter && genome.alignmentWeight > 0) {
+    // Average neighbor headings within flockingRadius
+    for (const other of nearbyPrey) {
+        avgHeadingX += other.headingX;
+        avgHeadingY += other.headingY;
+    }
+    // Blend into sensory input
+    senseX += avgHeadingX * genome.alignmentWeight;
+}
+```
+
+### Pack Hunting (Hunters)
+
+Hunters coordinate to flank prey from perpendicular angles:
+
+```javascript
+// In computeSensoryInput() for hunters
+if (creature.isHunter && genome.packCoordination > 0) {
+    // Find other hunters targeting same prey
+    // Calculate flanking angle perpendicular to average approach
+    const flankAngle = avgHunterAngle + Math.PI/2 * side;
+    // Blend between direct chase and flanking
+    finalAngle = lerp(directAngle, flankAngle, packCoordination);
+}
+```
+
+### Territory & Homing
+
+Creatures remember birthplace and are attracted back:
+
+```javascript
+// In computeSensoryInput()
+if (genome.homingStrength > 0 && creature.homeX !== undefined) {
+    const homeDist = distance(creature, home);
+    if (homeDist > genome.territoryRadius) {
+        // Gentle pull toward home when outside territory
+        senseX += (homeX - creature.x) / homeDist * homingStrength;
+    }
+}
+```
+
+### Visualization: Flock Links
+
+The "Flock Links" overlay draws cyan lines between flocking neighbors. Alpha varies with distance: `40 + 120 * (1 - dist/flockRadius)`.
 
 ## Performance Notes
 

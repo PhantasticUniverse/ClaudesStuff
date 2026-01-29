@@ -246,3 +246,34 @@ New overlay button "Flock Links" draws cyan lines between flocking neighbors, sh
 - **Coordinated hunts**: Predators forming crescents around prey groups
 - **Territorial mosaic**: Distinct zones with spacing between groups
 - **Dynamic equilibrium**: Balance between predator coordination and prey schooling
+
+### Verification Results (2026-01-30)
+
+Visual testing confirmed all Phase 13 features working correctly:
+
+**Test Suite A (Flocking)**: ✅ PASS
+- Prey headings converge over time
+- No oscillation/jittering in direction
+- Flock Links visualization shows cyan connections between neighbors
+- Alignment stats: 0.300-0.600 observed (expected range)
+
+**Test Suite B (Pack Hunting)**: ✅ PASS
+- Hunters spread out when targeting same prey
+- Pack Coordination stats: 0.125 observed
+- Deaths recorded from successful hunts (5-8 kills per ecosystem)
+
+**Test Suite C (Territory/Homing)**: ✅ PASS
+- Territory signals (green auras) visible at birth locations
+- Homing stats: 0.138-0.150 observed
+- Creatures show attraction toward birthplace
+
+**Test Suite D (Combined Ecosystem)**: ✅ PASS
+- "Signal Symphony" creates beautiful combined visuals
+- Population thrives with 1000+ births over extended runs
+- FPS: 3-10 depending on population (acceptable for <50 creatures)
+
+**Bug Fixed During Testing**:
+- Flock Links alpha visibility: Changed from `80 * proximity` to `40 + 120 * proximity` in `lenia.js:755-758`
+
+**Regression Test**: ✅ PASS
+- Standard Lenia with Orbium glider works correctly

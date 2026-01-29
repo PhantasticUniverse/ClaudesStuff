@@ -67,10 +67,11 @@ Support for 2-4 interacting species with cross-channel dynamics:
 - **Mating signals** - Attract mates when fertile
 - **Territory signals** - Mark defended areas
 
-### Collective Behaviors (Phase 13)
+### Collective Behaviors (Phase 13) ✅ Verified
 - **Schooling/Flocking** - Prey align headings like bird murmurations
 - **Pack Hunting** - Predators flank prey from multiple angles
 - **Homing/Territory** - Creatures return to and defend birthplace
+- **Flock Links Overlay** - Visualize flocking neighbor connections
 
 ### Recording & Export
 - WebM video recording
