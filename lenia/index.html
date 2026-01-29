@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lenia Explorer - Phase 2</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden;
+        }
+
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+
+        #canvas-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #050508;
+        }
+
+        #controls {
+            width: 340px;
+            background: #12121a;
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 1px solid #2a2a3a;
+        }
+
+        h1 {
+            font-size: 1.4em;
+            margin-bottom: 5px;
+            color: #fff;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        .subtitle {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 25px;
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 0.75em;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #888;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #2a2a3a;
+            padding-bottom: 8px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+
+        .value-display {
+            float: right;
+            color: #6af;
+            font-family: monospace;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            -webkit-appearance: none;
+            background: #2a2a3a;
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #6af;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #8cf;
+        }
+
+        select {
+            width: 100%;
+            padding: 8px 12px;
+            background: #1a1a24;
+            border: 1px solid #2a2a3a;
+            color: #e0e0e0;
+            border-radius: 4px;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #6af;
+        }
+
+        button {
+            padding: 10px 16px;
+            background: #2a2a3a;
+            border: none;
+            color: #e0e0e0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+
+        button:hover {
+            background: #3a3a4a;
+        }
+
+        button.primary {
+            background: #2a4a6a;
+        }
+
+        button.primary:hover {
+            background: #3a5a7a;
+        }
+
+        button.danger {
+            background: #4a2a2a;
+        }
+
+        button.danger:hover {
+            background: #5a3a3a;
+        }
+
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .stats {
+            font-family: monospace;
+            font-size: 0.8em;
+            color: #666;
+            background: #0a0a0f;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .stats div {
+            margin-bottom: 3px;
+        }
+
+        .color-preview {
+            display: flex;
+            height: 20px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .color-preview div {
+            flex: 1;
+        }
+
+        #info-panel {
+            font-size: 0.8em;
+            line-height: 1.6;
+            color: #888;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #2a2a3a;
+        }
+
+        #info-panel strong {
+            color: #aaa;
+        }
+
+        .keyboard-hint {
+            font-family: monospace;
+            background: #1a1a24;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        /* Mode tabs */
+        .mode-tabs {
+            display: flex;
+            margin-bottom: 15px;
+            gap: 5px;
+        }
+
+        .mode-tab {
+            flex: 1;
+            padding: 8px 10px;
+            background: #1a1a24;
+            border: 1px solid #2a2a3a;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.75em;
+            text-align: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .mode-tab:hover {
+            background: #2a2a3a;
+            color: #aaa;
+        }
+
+        .mode-tab.active {
+            background: #2a4a6a;
+            border-color: #3a5a7a;
+            color: #fff;
+        }
+
+        /* Mode panels */
+        .mode-panel {
+            display: none;
+        }
+
+        .mode-panel.active {
+            display: block;
+        }
+
+        /* Channel selector */
+        .channel-tabs {
+            display: flex;
+            margin-bottom: 10px;
+            gap: 3px;
+        }
+
+        .channel-tab {
+            flex: 1;
+            padding: 6px;
+            background: #1a1a24;
+            border: 2px solid #2a2a3a;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.8em;
+            text-align: center;
+            border-radius: 4px;
+        }
+
+        .channel-tab.active {
+            border-color: currentColor;
+            color: inherit;
+        }
+
+        /* Interaction matrix */
+        .interaction-matrix {
+            display: grid;
+            gap: 3px;
+            margin: 10px 0;
+        }
+
+        .matrix-cell {
+            width: 100%;
+            padding: 4px;
+            background: #1a1a24;
+            border: 1px solid #2a2a3a;
+            color: #e0e0e0;
+            text-align: center;
+            font-size: 0.8em;
+            border-radius: 3px;
+        }
+
+        .matrix-cell:focus {
+            outline: none;
+            border-color: #6af;
+        }
+
+        .matrix-label {
+            font-size: 0.7em;
+            color: #666;
+            text-align: center;
+            padding: 2px;
+        }
+
+        /* Progress bar */
+        .progress-bar {
+            height: 6px;
+            background: #2a2a3a;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #6af;
+            transition: width 0.1s;
+            width: 0%;
+        }
+
+        /* Recording indicator */
+        .recording-indicator {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            background: #4a2a2a;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .recording-indicator.active {
+            display: flex;
+        }
+
+        .recording-dot {
+            width: 10px;
+            height: 10px;
+            background: #f55;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Heatmap display */
+        .heatmap-container {
+            border: 1px solid #2a2a3a;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        /* Gallery item */
+        .gallery-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            background: #1a1a24;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+
+        .gallery-item:hover {
+            background: #2a2a3a;
+        }
+
+        .gallery-name {
+            flex: 1;
+            font-size: 0.85em;
+        }
+
+        .gallery-load {
+            padding: 4px 8px;
+            font-size: 0.75em;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container"></div>
+        <div id="controls">
+            <h1>LENIA EXPLORER</h1>
+            <p class="subtitle">Phase 2 - Ecosystems & Discovery</p>
+
+            <!-- Mode Tabs -->
+            <div class="mode-tabs">
+                <div class="mode-tab active" data-mode="single">Single</div>
+                <div class="mode-tab" data-mode="ecosystem">Ecosystem</div>
+                <div class="mode-tab" data-mode="discover">Discover</div>
+            </div>
+
+            <!-- Single Channel Mode -->
+            <div class="mode-panel active" id="panel-single">
+                <div class="section">
+                    <div class="section-title">Species Presets</div>
+                    <select id="species-select">
+                        <option value="orbium">Orbium (Glider)</option>
+                        <option value="geminium">Geminium (Self-replicator)</option>
+                        <option value="hydrogeminium">Hydrogeminium</option>
+                        <option value="scutium">Scutium Gravidus</option>
+                        <option value="custom">Custom Parameters</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Ecosystem Mode -->
+            <div class="mode-panel" id="panel-ecosystem">
+                <div class="section">
+                    <div class="section-title">Ecosystem Presets</div>
+                    <select id="ecosystem-select">
+                        <option value="predatorPrey">Predator & Prey</option>
+                        <option value="symbioticPair">Symbiotic Pair</option>
+                        <option value="chemicalSignals">Chemical Signals</option>
+                        <option value="competition">Competition</option>
+                        <option value="foodChain">Food Chain (3 species)</option>
+                    </select>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Active Channel</div>
+                    <div class="channel-tabs" id="channel-tabs">
+                        <div class="channel-tab active" data-channel="0" style="color: #ff5050;">Ch 0</div>
+                        <div class="channel-tab" data-channel="1" style="color: #50ff50;">Ch 1</div>
+                        <div class="channel-tab" data-channel="2" style="color: #5050ff;">Ch 2</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Interaction Matrix</div>
+                    <p style="font-size: 0.75em; color: #666; margin-bottom: 8px;">How channels affect each other's growth</p>
+                    <div class="interaction-matrix" id="interaction-matrix" style="grid-template-columns: 40px repeat(3, 1fr);">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Discovery Mode -->
+            <div class="mode-panel" id="panel-discover">
+                <div class="section">
+                    <div class="section-title">Parameter Explorer</div>
+                    <div class="button-row">
+                        <button id="btn-grid-search" class="primary">Grid Search</button>
+                        <button id="btn-stop-search">Stop</button>
+                    </div>
+                    <div class="progress-bar" id="search-progress">
+                        <div class="progress-fill" id="search-progress-fill"></div>
+                    </div>
+                    <div class="heatmap-container">
+                        <canvas id="search-heatmap" width="150" height="150"></canvas>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Evolution</div>
+                    <div class="control-group">
+                        <label>Generations <span class="value-display" id="evo-gens-value">50</span></label>
+                        <input type="range" id="evo-gens" min="10" max="200" value="50" step="10">
+                    </div>
+                    <div class="button-row">
+                        <button id="btn-evolve" class="primary">Evolve</button>
+                        <button id="btn-stop-evolve">Stop</button>
+                    </div>
+                    <div class="progress-bar" id="evo-progress">
+                        <div class="progress-fill" id="evo-progress-fill"></div>
+                    </div>
+                    <div id="evo-status" style="font-size: 0.8em; color: #888; margin-top: 5px;"></div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Gallery</div>
+                    <div class="button-row">
+                        <button id="btn-save-discovery">Save Current</button>
+                        <button id="btn-export-gallery">Export</button>
+                    </div>
+                    <div id="gallery-list" style="max-height: 150px; overflow-y: auto; margin-top: 10px;">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Kernel Parameters</div>
+                <div class="control-group">
+                    <label>Kernel Type</label>
+                    <select id="kernel-type">
+                        <option value="ring">Ring (Classic)</option>
+                        <option value="gaussian">Gaussian</option>
+                        <option value="mexicanHat">Mexican Hat</option>
+                        <option value="asymmetric">Asymmetric</option>
+                        <option value="spiral">Spiral</option>
+                        <option value="star">Star</option>
+                        <option value="multiScale">Multi-Scale</option>
+                        <option value="anisotropic">Anisotropic</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Kernel Radius <span class="value-display" id="kernel-radius-value">13</span></label>
+                    <input type="range" id="kernel-radius" min="5" max="30" value="13" step="1">
+                </div>
+                <div class="control-group" id="kernel-peaks-group">
+                    <label>Kernel Peaks <span class="value-display" id="kernel-peaks-value">1</span></label>
+                    <input type="range" id="kernel-peaks" min="1" max="4" value="1" step="1">
+                </div>
+                <!-- Spiral params -->
+                <div class="control-group kernel-param" id="spiral-arms-group" style="display:none;">
+                    <label>Spiral Arms <span class="value-display" id="spiral-arms-value">3</span></label>
+                    <input type="range" id="spiral-arms" min="1" max="6" value="3" step="1">
+                </div>
+                <div class="control-group kernel-param" id="spiral-tightness-group" style="display:none;">
+                    <label>Tightness <span class="value-display" id="spiral-tightness-value">1.5</span></label>
+                    <input type="range" id="spiral-tightness" min="0.5" max="3" value="1.5" step="0.1">
+                </div>
+                <!-- Star params -->
+                <div class="control-group kernel-param" id="star-points-group" style="display:none;">
+                    <label>Star Points <span class="value-display" id="star-points-value">5</span></label>
+                    <input type="range" id="star-points" min="3" max="8" value="5" step="1">
+                </div>
+                <div class="control-group kernel-param" id="star-sharpness-group" style="display:none;">
+                    <label>Sharpness <span class="value-display" id="star-sharpness-value">0.5</span></label>
+                    <input type="range" id="star-sharpness" min="0.1" max="0.9" value="0.5" step="0.05">
+                </div>
+                <!-- Anisotropic params -->
+                <div class="control-group kernel-param" id="aniso-angle-group" style="display:none;">
+                    <label>Direction <span class="value-display" id="aniso-angle-value">0</span>°</label>
+                    <input type="range" id="aniso-angle" min="0" max="360" value="0" step="15">
+                </div>
+                <div class="control-group kernel-param" id="aniso-eccentricity-group" style="display:none;">
+                    <label>Eccentricity <span class="value-display" id="aniso-eccentricity-value">0.6</span></label>
+                    <input type="range" id="aniso-eccentricity" min="0" max="0.9" value="0.6" step="0.05">
+                </div>
+                <!-- Asymmetric params -->
+                <div class="control-group kernel-param" id="asymmetric-bias-group" style="display:none;">
+                    <label>Bias <span class="value-display" id="asymmetric-bias-value">0.3</span></label>
+                    <input type="range" id="asymmetric-bias" min="0" max="1" value="0.3" step="0.05">
+                </div>
+                <!-- Kernel preview -->
+                <div class="control-group">
+                    <label>Kernel Preview</label>
+                    <canvas id="kernel-preview" width="80" height="80" style="border: 1px solid #2a2a3a; border-radius: 4px;"></canvas>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Growth Function</div>
+                <div class="control-group">
+                    <label>Growth Center (μ) <span class="value-display" id="growth-mu-value">0.15</span></label>
+                    <input type="range" id="growth-mu" min="0.05" max="0.5" value="0.15" step="0.01">
+                </div>
+                <div class="control-group">
+                    <label>Growth Width (σ) <span class="value-display" id="growth-sigma-value">0.015</span></label>
+                    <input type="range" id="growth-sigma" min="0.005" max="0.1" value="0.015" step="0.001">
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Simulation</div>
+                <div class="control-group">
+                    <label>Time Step (dt) <span class="value-display" id="dt-value">0.1</span></label>
+                    <input type="range" id="dt" min="0.01" max="0.5" value="0.1" step="0.01">
+                </div>
+                <div class="control-group">
+                    <label>Grid Size <span class="value-display" id="grid-size-value">256</span></label>
+                    <input type="range" id="grid-size" min="64" max="512" value="256" step="64">
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Visualization</div>
+                <div class="control-group">
+                    <label>Color Scheme</label>
+                    <select id="color-scheme">
+                        <option value="viridis">Viridis</option>
+                        <option value="plasma">Plasma</option>
+                        <option value="magma">Magma</option>
+                        <option value="inferno">Inferno</option>
+                        <option value="ocean">Ocean</option>
+                        <option value="grayscale">Grayscale</option>
+                    </select>
+                    <div class="color-preview" id="color-preview"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Actions</div>
+                <div class="button-row">
+                    <button id="btn-pause" class="primary">Pause</button>
+                    <button id="btn-step">Step</button>
+                    <button id="btn-reset" class="danger">Reset</button>
+                </div>
+                <div class="button-row">
+                    <button id="btn-clear">Clear</button>
+                    <button id="btn-random">Random</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Recording</div>
+                <div class="recording-indicator" id="recording-indicator">
+                    <div class="recording-dot"></div>
+                    <span id="recording-time">0:00</span>
+                </div>
+                <div class="control-group">
+                    <label>Duration (sec) <span class="value-display" id="record-duration-value">5</span></label>
+                    <input type="range" id="record-duration" min="3" max="30" value="5" step="1">
+                </div>
+                <div class="button-row">
+                    <button id="btn-record-webm">Record WebM</button>
+                    <button id="btn-record-gif">Record GIF</button>
+                </div>
+                <div class="button-row">
+                    <button id="btn-screenshot">Screenshot</button>
+                </div>
+                <div class="progress-bar" id="record-progress" style="display: none;">
+                    <div class="progress-fill" id="record-progress-fill"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Draw Mode</div>
+                <div class="control-group">
+                    <label>Brush Size <span class="value-display" id="brush-size-value">20</span></label>
+                    <input type="range" id="brush-size" min="5" max="50" value="20" step="1">
+                </div>
+                <div class="button-row">
+                    <button id="btn-draw-creature">Draw Creature</button>
+                    <button id="btn-draw-erase">Erase</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Statistics</div>
+                <div class="stats">
+                    <div>FPS: <span id="stat-fps">0</span></div>
+                    <div>Total Mass: <span id="stat-mass">0</span></div>
+                    <div>Generation: <span id="stat-gen">0</span></div>
+                </div>
+            </div>
+
+            <div id="info-panel">
+                <strong>Controls:</strong><br>
+                <span class="keyboard-hint">Space</span> Pause/Resume<br>
+                <span class="keyboard-hint">R</span> Reset<br>
+                <span class="keyboard-hint">C</span> Clear<br>
+                <span class="keyboard-hint">S</span> Screenshot<br>
+                <span class="keyboard-hint">Click</span> Draw<br>
+                <span class="keyboard-hint">Shift+Click</span> Erase
+            </div>
+        </div>
+    </div>
+
+    <script src="kernels.js"></script>
+    <script src="species.js"></script>
+    <script src="multi-channel.js"></script>
+    <script src="explorer.js"></script>
+    <script src="recorder.js"></script>
+    <script src="lenia.js"></script>
+    <script src="ui.js"></script>
+</body>
+</html>
