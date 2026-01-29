@@ -6,7 +6,7 @@ Creative coding experiments with Claude. Focus: artificial life, generative art,
 
 Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-### Status: Phase 7 Complete
+### Status: Phase 8 Complete
 
 1. Core Lenia with multiple kernel types
 2. Multi-channel ecosystems
@@ -14,7 +14,8 @@ Interactive web-based Lenia - continuous cellular automata producing lifelike cr
 4. Sensory creatures & environments
 5. Evolving creatures - genome inheritance, energy system, reproduction
 6. Morphology evolution - kernel parameters (R, μ, σ) are heritable traits
-7. **Directional creatures** - kernel bias creates asymmetric, oriented creatures
+7. Directional creatures - kernel bias creates asymmetric, oriented creatures
+8. **Asymmetric sensing** - creatures detect stimuli directionally (forward/backward focus)
 
 ### Key Files
 
@@ -71,8 +72,10 @@ After any change, open the browser and verify:
 3. Confirm it works
 4. Update this CLAUDE.md if needed
 5. **Write a Reflections section** for major phases - document lessons learned, trade-offs, and insights
-6. Commit and push
+6. **Commit and push** - don't forget this step! Always commit and push at the end of each major change
 7. Then add the next thing
+
+**IMPORTANT**: Always ask the user if they want to commit and push after completing a major phase or feature.
 
 ### Parameter Design
 
@@ -182,3 +185,56 @@ Directional effects are most visible when:
 - Using sensory species (they have consistent headings)
 
 With low bias or random movement, creatures remain blob-like. As bias increases, they become more elongated in their movement direction.
+
+---
+
+## Reflections (Phase 8)
+
+### Asymmetric Sensing via Cosine Weighting
+
+Phase 8 adds directional perception through two new genome parameters:
+- **sensorAngle** (radians): Direction of best sensing relative to heading. 0 = forward, π = backward
+- **sensorFocus** (0-1): How focused the sensing is. 0 = isotropic (all directions equal), 1 = narrow cone
+
+### Implementation: Gradient Weighting
+
+Rather than computing separate sensors per direction, we weight existing gradients by angular alignment:
+
+```
+For each sensory gradient (food, pheromone, social):
+1. Compute preferred sensing direction = creature.heading + genome.sensorAngle
+2. Compute angle between gradient direction and preferred direction
+3. Apply cosine weighting: (1 + cos(relativeAngle)) / 2
+4. Interpolate between full sensitivity and weighted sensitivity based on focus
+```
+
+This elegantly reuses the existing gradient system while adding directional selectivity.
+
+### Species Sensing Profiles
+
+- **Hunter**: sensorAngle=0 (forward), sensorFocus=0.6 - focused forward cone spots prey ahead
+- **Prey**: sensorAngle=π (backward), sensorFocus=0.4 - rear awareness detects approaching predators
+- **Grazer**: sensorAngle=0, sensorFocus=0.1 - mostly isotropic, explores food evenly
+- **Schooler**: sensorAngle=0, sensorFocus=0.2 - mild forward bias for group coordination
+
+### Combined with Directional Movement
+
+With both Phase 7 (directional movement) and Phase 8 (directional sensing):
+
+- **Hunters become predator-shaped**: High kernelBias (streamlined body) + forward sensorFocus (spot prey ahead) = focused pursuit
+- **Prey become evasive**: Low kernelBias (maneuverable) + backward sensorFocus (detect threats behind) = early escape
+
+### Evolutionary Pressure
+
+The asymmetric sensing creates selection pressure:
+- Hunters with tighter forward focus catch more prey (better at pursuit)
+- Prey with wider rear awareness survive longer (earlier predator detection)
+- Over generations, expect hunters to evolve higher focus and prey to evolve backward sensing
+
+### Observing Asymmetric Sensing
+
+Effects are most visible when:
+- Comparing Hunter vs Prey behavior near food/threats
+- Evolution enabled with high mutation rate (0.15+)
+- Mixed population of hunters and prey
+- "Avg Focus" stat in Evolution Statistics shows population average

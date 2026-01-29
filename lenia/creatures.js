@@ -57,6 +57,12 @@ class Genome {
         // These create asymmetric creatures with a "front" and "back"
         this.kernelBias = defaults.kernelBias ?? 0.0;       // Asymmetric bias (0 = symmetric, 0.1-0.5 = directional)
         this.kernelOrientation = defaults.kernelOrientation ?? 0;  // Preferred orientation relative to heading (radians)
+
+        // Phase 8: Asymmetric sensing parameters
+        // These control directional perception - creatures can sense better in certain directions
+        this.sensorAngle = defaults.sensorAngle ?? 0;       // Direction of best sensing relative to heading (radians)
+                                                            // 0 = forward, π = backward, ±π/2 = sideways
+        this.sensorFocus = defaults.sensorFocus ?? 0.0;     // How focused the sensing is (0 = isotropic, 1 = narrow cone)
     }
 
     /**
@@ -107,6 +113,15 @@ class Genome {
         while (child.kernelOrientation > Math.PI) child.kernelOrientation -= 2 * Math.PI;
         while (child.kernelOrientation < -Math.PI) child.kernelOrientation += 2 * Math.PI;
 
+        // Phase 8: Mutate asymmetric sensing parameters
+        // Sensor angle affects which direction the creature senses best
+        child.sensorAngle = mutate(child.sensorAngle, -Math.PI, Math.PI);
+        // Normalize to [-PI, PI]
+        while (child.sensorAngle > Math.PI) child.sensorAngle -= 2 * Math.PI;
+        while (child.sensorAngle < -Math.PI) child.sensorAngle += 2 * Math.PI;
+        // Sensor focus affects how directional vs isotropic sensing is
+        child.sensorFocus = mutate(child.sensorFocus, 0, 1.0);
+
         // Small chance to flip predator status
         if (Math.random() < mutationRate * 0.1) {
             child.isPredator = !child.isPredator;
@@ -137,7 +152,10 @@ class Genome {
             growthSigma: this.growthSigma,
             // Phase 7: Directional parameters
             kernelBias: this.kernelBias,
-            kernelOrientation: this.kernelOrientation
+            kernelOrientation: this.kernelOrientation,
+            // Phase 8: Asymmetric sensing parameters
+            sensorAngle: this.sensorAngle,
+            sensorFocus: this.sensorFocus
         });
     }
 
@@ -159,7 +177,10 @@ class Genome {
             growthSigma: sensory.growthSigma ?? 0.02,
             // Phase 7: Directional defaults
             kernelBias: sensory.kernelBias ?? 0.0,
-            kernelOrientation: sensory.kernelOrientation ?? 0
+            kernelOrientation: sensory.kernelOrientation ?? 0,
+            // Phase 8: Asymmetric sensing defaults
+            sensorAngle: sensory.sensorAngle ?? 0,
+            sensorFocus: sensory.sensorFocus ?? 0.0
         });
     }
 }
@@ -505,6 +526,7 @@ class CreatureTracker {
 
     /**
      * Compute sensory input for a creature
+     * Phase 8: Now applies directional weighting based on sensorAngle and sensorFocus
      * @param {Creature} creature - The sensing creature
      * @param {Environment} environment - Environment with food/pheromone fields
      * @returns {Object} - Sensory direction {x, y}
@@ -515,34 +537,86 @@ class CreatureTracker {
         let senseX = 0;
         let senseY = 0;
 
-        // Food gradient sensing
+        // Phase 8: Get asymmetric sensing parameters from genome
+        const genome = creature.genome;
+        const sensorAngle = genome ? genome.sensorAngle : 0;
+        const sensorFocus = genome ? genome.sensorFocus : 0;
+
+        // Preferred sensing direction = creature heading + sensor angle offset
+        const preferredDir = creature.heading + sensorAngle;
+
+        // Food gradient sensing with directional weighting
         if (sensory.foodWeight !== 0 && environment) {
             const foodGrad = environment.getFoodGradient(creature.x, creature.y);
-            senseX += foodGrad.x * sensory.foodWeight;
-            senseY += foodGrad.y * sensory.foodWeight;
+            const weighted = this.applyDirectionalWeight(foodGrad, preferredDir, sensorFocus);
+            senseX += weighted.x * sensory.foodWeight;
+            senseY += weighted.y * sensory.foodWeight;
         }
 
-        // Pheromone gradient sensing
+        // Pheromone gradient sensing with directional weighting
         if (sensory.pheromoneWeight !== 0 && environment) {
             const pheromoneGrad = environment.getPheromoneGradient(creature.x, creature.y);
-            senseX += pheromoneGrad.x * sensory.pheromoneWeight;
-            senseY += pheromoneGrad.y * sensory.pheromoneWeight;
+            const weighted = this.applyDirectionalWeight(pheromoneGrad, preferredDir, sensorFocus);
+            senseX += weighted.x * sensory.pheromoneWeight;
+            senseY += weighted.y * sensory.pheromoneWeight;
         }
 
-        // Social sensing (other creatures)
+        // Social sensing (other creatures) with directional weighting
         if (sensory.socialWeight !== 0) {
             const social = this.computeSocialForceForCreature(creature, sensory);
-            senseX += social.x * sensory.socialWeight;
-            senseY += social.y * sensory.socialWeight;
+            const weighted = this.applyDirectionalWeight(social, preferredDir, sensorFocus);
+            senseX += weighted.x * sensory.socialWeight;
+            senseY += weighted.y * sensory.socialWeight;
         }
 
-        // Add current (environmental flow)
+        // Add current (environmental flow) - no directional weighting for currents
         if (environment && environment.current) {
             senseX += environment.current.x;
             senseY += environment.current.y;
         }
 
         return { x: senseX, y: senseY };
+    }
+
+    /**
+     * Apply directional weighting to a gradient based on sensor focus
+     * Phase 8: Cosine-weighted sensing - strongest at preferredDir, weakest opposite
+     * @param {Object} gradient - The gradient vector {x, y}
+     * @param {number} preferredDir - The preferred sensing direction (radians)
+     * @param {number} focus - How focused the sensing is (0 = isotropic, 1 = narrow cone)
+     * @returns {Object} - Weighted gradient {x, y}
+     */
+    applyDirectionalWeight(gradient, preferredDir, focus) {
+        // If focus is 0, return gradient unchanged (isotropic sensing)
+        if (focus <= 0.001) {
+            return gradient;
+        }
+
+        const gradMag = Math.sqrt(gradient.x * gradient.x + gradient.y * gradient.y);
+        if (gradMag < 0.001) {
+            return gradient; // No gradient to weight
+        }
+
+        // Compute direction of the gradient stimulus
+        const stimulusDir = Math.atan2(gradient.y, gradient.x);
+
+        // Compute angle difference between stimulus and preferred direction
+        let relativeAngle = stimulusDir - preferredDir;
+        // Normalize to [-PI, PI]
+        while (relativeAngle > Math.PI) relativeAngle -= 2 * Math.PI;
+        while (relativeAngle < -Math.PI) relativeAngle += 2 * Math.PI;
+
+        // Cosine weighting: strongest at angle=0 (aligned with preferred), weakest at angle=±π
+        // baseFactor ranges from 0 (opposite direction) to 1 (aligned)
+        const baseFactor = (1 + Math.cos(relativeAngle)) / 2;
+
+        // Interpolate between full sensitivity (1.0) and directional sensitivity based on focus
+        const directionWeight = 1.0 - focus + focus * baseFactor;
+
+        return {
+            x: gradient.x * directionWeight,
+            y: gradient.y * directionWeight
+        };
     }
 
     /**
@@ -903,7 +977,9 @@ class CreatureTracker {
             growthMu: 0,
             growthSigma: 0,
             // Phase 7: Directional traits
-            kernelBias: 0
+            kernelBias: 0,
+            // Phase 8: Asymmetric sensing traits
+            sensorFocus: 0
         };
 
         for (const creature of this.creatures) {
@@ -922,6 +998,8 @@ class CreatureTracker {
                 traits.growthSigma += creature.genome.growthSigma;
                 // Phase 7: Directional traits
                 traits.kernelBias += creature.genome.kernelBias;
+                // Phase 8: Asymmetric sensing traits
+                traits.sensorFocus += creature.genome.sensorFocus;
             }
         }
 

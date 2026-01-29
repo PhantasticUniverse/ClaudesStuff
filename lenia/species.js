@@ -409,6 +409,7 @@ const Species = {
             // Phase 5: Evolution genome
             // Phase 6: Added morphology parameters
             // Phase 7: Added directional parameters
+            // Phase 8: Added asymmetric sensing parameters
             genome: {
                 foodWeight: 1.5,
                 pheromoneWeight: 0.3,
@@ -426,7 +427,10 @@ const Species = {
                 growthSigma: 0.025,
                 // Directional: symmetric forager
                 kernelBias: 0.05,
-                kernelOrientation: 0
+                kernelOrientation: 0,
+                // Sensing: mostly isotropic, explores evenly
+                sensorAngle: 0,
+                sensorFocus: 0.1
             }
         },
         // Compact circular blob
@@ -484,6 +488,7 @@ const Species = {
             // Phase 5: Evolution genome
             // Phase 6: Added morphology parameters
             // Phase 7: Added directional parameters
+            // Phase 8: Added asymmetric sensing parameters
             genome: {
                 foodWeight: 0.3,
                 pheromoneWeight: 1.2,
@@ -501,7 +506,10 @@ const Species = {
                 growthSigma: 0.022,
                 // Directional: mild forward bias for group movement
                 kernelBias: 0.1,
-                kernelOrientation: 0
+                kernelOrientation: 0,
+                // Sensing: mild forward bias for group coordination
+                sensorAngle: 0,
+                sensorFocus: 0.2
             }
         },
         // Streamlined shape for schooling
@@ -564,6 +572,7 @@ const Species = {
             // Phase 5: Evolution genome
             // Phase 6: Added morphology parameters
             // Phase 7: Added directional parameters
+            // Phase 8: Added asymmetric sensing parameters
             genome: {
                 foodWeight: 0.0,
                 pheromoneWeight: 0.5,
@@ -581,7 +590,10 @@ const Species = {
                 growthSigma: 0.028,
                 // Directional: HIGH bias for streamlined predator shape
                 kernelBias: 0.3,
-                kernelOrientation: 0
+                kernelOrientation: 0,
+                // Sensing: STRONG forward focus - spot prey ahead
+                sensorAngle: 0,
+                sensorFocus: 0.6
             }
         },
         // Larger, more aggressive shape
@@ -643,6 +655,7 @@ const Species = {
             // Phase 5: Evolution genome
             // Phase 6: Added morphology parameters
             // Phase 7: Added directional parameters
+            // Phase 8: Added asymmetric sensing parameters
             genome: {
                 foodWeight: 0.8,
                 pheromoneWeight: -0.3,
@@ -660,7 +673,10 @@ const Species = {
                 growthSigma: 0.03,
                 // Directional: LOW bias for maneuverability (can turn quickly)
                 kernelBias: 0.1,
-                kernelOrientation: 0
+                kernelOrientation: 0,
+                // Sensing: BACKWARD focus - detect approaching predators
+                sensorAngle: Math.PI,    // π = backward
+                sensorFocus: 0.4
             }
         },
         // Small, compact shape for speed

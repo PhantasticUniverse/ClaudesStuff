@@ -1199,6 +1199,12 @@ function updateEvolutionStats() {
     if (traitKernelBiasEl && traits.kernelBias !== undefined) {
         traitKernelBiasEl.textContent = traits.kernelBias.toFixed(3);
     }
+
+    // Phase 8: Asymmetric sensing trait averages
+    const traitSensorFocusEl = document.getElementById('stat-trait-sensor-focus');
+    if (traitSensorFocusEl && traits.sensorFocus !== undefined) {
+        traitSensorFocusEl.textContent = traits.sensorFocus.toFixed(3);
+    }
 }
 
 /**
