@@ -1193,6 +1193,12 @@ function updateEvolutionStats() {
     if (traitGrowthSigmaEl && traits.growthSigma !== undefined) {
         traitGrowthSigmaEl.textContent = traits.growthSigma.toFixed(4);
     }
+
+    // Phase 7: Directional trait averages
+    const traitKernelBiasEl = document.getElementById('stat-trait-kernel-bias');
+    if (traitKernelBiasEl && traits.kernelBias !== undefined) {
+        traitKernelBiasEl.textContent = traits.kernelBias.toFixed(3);
+    }
 }
 
 /**

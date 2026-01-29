@@ -408,6 +408,7 @@ const Species = {
             },
             // Phase 5: Evolution genome
             // Phase 6: Added morphology parameters
+            // Phase 7: Added directional parameters
             genome: {
                 foodWeight: 1.5,
                 pheromoneWeight: 0.3,
@@ -422,7 +423,10 @@ const Species = {
                 // Morphology: medium-sized, balanced
                 kernelRadius: 10,
                 growthMu: 0.18,
-                growthSigma: 0.025
+                growthSigma: 0.025,
+                // Directional: symmetric forager
+                kernelBias: 0.05,
+                kernelOrientation: 0
             }
         },
         // Compact circular blob
@@ -479,6 +483,7 @@ const Species = {
             },
             // Phase 5: Evolution genome
             // Phase 6: Added morphology parameters
+            // Phase 7: Added directional parameters
             genome: {
                 foodWeight: 0.3,
                 pheromoneWeight: 1.2,
@@ -493,7 +498,10 @@ const Species = {
                 // Morphology: medium-sized, moderate cohesion
                 kernelRadius: 11,
                 growthMu: 0.20,
-                growthSigma: 0.022
+                growthSigma: 0.022,
+                // Directional: mild forward bias for group movement
+                kernelBias: 0.1,
+                kernelOrientation: 0
             }
         },
         // Streamlined shape for schooling
@@ -555,6 +563,7 @@ const Species = {
             },
             // Phase 5: Evolution genome
             // Phase 6: Added morphology parameters
+            // Phase 7: Added directional parameters
             genome: {
                 foodWeight: 0.0,
                 pheromoneWeight: 0.5,
@@ -569,7 +578,10 @@ const Species = {
                 // Morphology: LARGE kernel radius for better prey detection
                 kernelRadius: 14,
                 growthMu: 0.24,
-                growthSigma: 0.028
+                growthSigma: 0.028,
+                // Directional: HIGH bias for streamlined predator shape
+                kernelBias: 0.3,
+                kernelOrientation: 0
             }
         },
         // Larger, more aggressive shape
@@ -630,6 +642,7 @@ const Species = {
             },
             // Phase 5: Evolution genome
             // Phase 6: Added morphology parameters
+            // Phase 7: Added directional parameters
             genome: {
                 foodWeight: 0.8,
                 pheromoneWeight: -0.3,
@@ -644,7 +657,10 @@ const Species = {
                 // Morphology: SMALL kernel radius for faster, more agile movement
                 kernelRadius: 8,
                 growthMu: 0.16,
-                growthSigma: 0.03
+                growthSigma: 0.03,
+                // Directional: LOW bias for maneuverability (can turn quickly)
+                kernelBias: 0.1,
+                kernelOrientation: 0
             }
         },
         // Small, compact shape for speed

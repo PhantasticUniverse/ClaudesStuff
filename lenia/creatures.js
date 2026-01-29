@@ -52,6 +52,11 @@ class Genome {
         this.kernelRadius = defaults.kernelRadius ?? 10;    // R: creature size (8-15 range)
         this.growthMu = defaults.growthMu ?? 0.15;          // μ: growth function center (0.1-0.3)
         this.growthSigma = defaults.growthSigma ?? 0.02;    // σ: growth function width (0.01-0.05)
+
+        // Phase 7: Directional morphology parameters
+        // These create asymmetric creatures with a "front" and "back"
+        this.kernelBias = defaults.kernelBias ?? 0.0;       // Asymmetric bias (0 = symmetric, 0.1-0.5 = directional)
+        this.kernelOrientation = defaults.kernelOrientation ?? 0;  // Preferred orientation relative to heading (radians)
     }
 
     /**
@@ -93,6 +98,15 @@ class Genome {
         // Growth sigma affects tolerance to density variations
         child.growthSigma = mutate(child.growthSigma, 0.01, 0.05);
 
+        // Phase 7: Mutate directional parameters
+        // Kernel bias affects how asymmetric/directional the creature is
+        child.kernelBias = mutate(child.kernelBias, 0, 0.5);
+        // Kernel orientation affects which direction is "forward" relative to heading
+        child.kernelOrientation = mutate(child.kernelOrientation, -Math.PI, Math.PI);
+        // Normalize orientation to [-PI, PI]
+        while (child.kernelOrientation > Math.PI) child.kernelOrientation -= 2 * Math.PI;
+        while (child.kernelOrientation < -Math.PI) child.kernelOrientation += 2 * Math.PI;
+
         // Small chance to flip predator status
         if (Math.random() < mutationRate * 0.1) {
             child.isPredator = !child.isPredator;
@@ -120,7 +134,10 @@ class Genome {
             // Phase 6: Morphology parameters
             kernelRadius: this.kernelRadius,
             growthMu: this.growthMu,
-            growthSigma: this.growthSigma
+            growthSigma: this.growthSigma,
+            // Phase 7: Directional parameters
+            kernelBias: this.kernelBias,
+            kernelOrientation: this.kernelOrientation
         });
     }
 
@@ -139,7 +156,10 @@ class Genome {
             // Phase 6: Morphology defaults
             kernelRadius: sensory.kernelRadius ?? 10,
             growthMu: sensory.growthMu ?? 0.15,
-            growthSigma: sensory.growthSigma ?? 0.02
+            growthSigma: sensory.growthSigma ?? 0.02,
+            // Phase 7: Directional defaults
+            kernelBias: sensory.kernelBias ?? 0.0,
+            kernelOrientation: sensory.kernelOrientation ?? 0
         });
     }
 }
@@ -881,7 +901,9 @@ class CreatureTracker {
             // Phase 6: Morphology traits
             kernelRadius: 0,
             growthMu: 0,
-            growthSigma: 0
+            growthSigma: 0,
+            // Phase 7: Directional traits
+            kernelBias: 0
         };
 
         for (const creature of this.creatures) {
@@ -898,6 +920,8 @@ class CreatureTracker {
                 traits.kernelRadius += creature.genome.kernelRadius;
                 traits.growthMu += creature.genome.growthMu;
                 traits.growthSigma += creature.genome.growthSigma;
+                // Phase 7: Directional traits
+                traits.kernelBias += creature.genome.kernelBias;
             }
         }
 

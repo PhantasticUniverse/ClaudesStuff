@@ -6,14 +6,15 @@ Creative coding experiments with Claude. Focus: artificial life, generative art,
 
 Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-### Status: Phase 6 Complete
+### Status: Phase 7 Complete
 
 1. Core Lenia with multiple kernel types
 2. Multi-channel ecosystems
 3. Flow-Lenia (mass-conservative)
 4. Sensory creatures & environments
 5. Evolving creatures - genome inheritance, energy system, reproduction
-6. **Morphology evolution** - kernel parameters (R, μ, σ) are heritable traits
+6. Morphology evolution - kernel parameters (R, μ, σ) are heritable traits
+7. **Directional creatures** - kernel bias creates asymmetric, oriented creatures
 
 ### Key Files
 
@@ -69,8 +70,9 @@ After any change, open the browser and verify:
 2. Test it visually in the browser
 3. Confirm it works
 4. Update this CLAUDE.md if needed
-5. Commit and push
-6. Then add the next thing
+5. **Write a Reflections section** for major phases - document lessons learned, trade-offs, and insights
+6. Commit and push
+7. Then add the next thing
 
 ### Parameter Design
 
@@ -144,3 +146,39 @@ Different species now have distinct starting morphologies:
 - **Grazer/Schooler**: Balanced medium R (10-11)
 
 This creates natural advantages: hunters sense prey from farther away, prey can maneuver more quickly.
+
+---
+
+## Reflections (Phase 7)
+
+### Directional Creatures via Kernel Bias
+
+Phase 7 adds directional asymmetry to creature morphology through two new genome parameters:
+- **kernelBias** (0-0.5): How asymmetric the creature is. 0 = symmetric blob, 0.3+ = noticeably directional
+- **kernelOrientation** (radians): Which direction is "forward" relative to heading
+
+### Implementation Approach
+
+Rather than computing asymmetric kernels per-creature, we add a directional bias term to the flow field:
+1. Compute the creature's effective orientation = heading + kernelOrientation
+2. Create a bias vector pointing in that direction, scaled by kernelBias
+3. Add this bias to the flow gradient where the creature has mass
+4. Stronger bias = mass flows more strongly "forward"
+
+This creates creatures that naturally propel themselves in their heading direction.
+
+### Species Directional Profiles
+
+- **Hunter**: High bias (0.3) - streamlined predator shape, moves decisively toward prey
+- **Prey**: Low bias (0.1) - more maneuverable, can change direction quickly
+- **Grazer**: Minimal bias (0.05) - symmetric forager, explores evenly
+- **Schooler**: Mild bias (0.1) - slight forward tendency for coordinated movement
+
+### Observing Directionality
+
+Directional effects are most visible when:
+- Creatures have high bias values (0.2+)
+- Evolution is enabled so bias can drift
+- Using sensory species (they have consistent headings)
+
+With low bias or random movement, creatures remain blob-like. As bias increases, they become more elongated in their movement direction.

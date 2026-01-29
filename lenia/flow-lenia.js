@@ -187,6 +187,7 @@ class FlowLenia {
      * Compute affinity map from potential using growth function
      * Affinity = G(U) - this tells us where mass "wants" to be
      * Phase 6: Now includes morphology influence from creature genomes
+     * Phase 7: Also stores directional bias for flow field computation
      */
     computeAffinity() {
         const { size, potential, affinity, A } = this;
@@ -202,12 +203,16 @@ class FlowLenia {
             for (let i = 0; i < size * size; i++) {
                 affinity[i] = this.growth(potential[i]);
             }
+            // Clear morphology influence cache
+            this.morphInfluenceCache = null;
             return;
         }
 
-        // Phase 6: Compute with local morphology influence
+        // Phase 6 & 7: Compute with local morphology influence
         // Build a map of morphology influence at each cell
         const morphInfluence = this.computeMorphologyInfluence();
+        // Cache for use in flow field computation (Phase 7)
+        this.morphInfluenceCache = morphInfluence;
 
         for (let i = 0; i < size * size; i++) {
             const influence = morphInfluence[i];
@@ -227,9 +232,10 @@ class FlowLenia {
     }
 
     /**
-     * Phase 6: Compute local morphology influence from creatures
-     * Returns an array where each cell has { mu, sigma, weight }
+     * Phase 6 & 7: Compute local morphology influence from creatures
+     * Returns an array where each cell has { mu, sigma, weight, biasX, biasY }
      * Weight indicates how strongly creatures influence that location
+     * Phase 7 adds biasX/biasY for directional asymmetry based on creature heading
      */
     computeMorphologyInfluence() {
         const { size, A, creatureTracker } = this;
@@ -237,7 +243,7 @@ class FlowLenia {
 
         // Initialize with zeros
         for (let i = 0; i < size * size; i++) {
-            influence[i] = { mu: this.mu, sigma: this.sigma, weight: 0 };
+            influence[i] = { mu: this.mu, sigma: this.sigma, weight: 0, biasX: 0, biasY: 0 };
         }
 
         if (!creatureTracker) return influence;
@@ -250,6 +256,13 @@ class FlowLenia {
             const cx = Math.floor(creature.x);
             const cy = Math.floor(creature.y);
             const radius = Math.ceil(genome.kernelRadius * 1.5); // Influence extends beyond kernel
+
+            // Phase 7: Compute effective orientation (heading + genome orientation)
+            const effectiveOrientation = creature.heading + genome.kernelOrientation;
+            const biasStrength = genome.kernelBias;
+            // Direction vector for bias
+            const biasDirX = Math.cos(effectiveOrientation) * biasStrength;
+            const biasDirY = Math.sin(effectiveOrientation) * biasStrength;
 
             // Spread influence in a circle around creature center
             for (let dy = -radius; dy <= radius; dy++) {
@@ -272,7 +285,10 @@ class FlowLenia {
                         influence[idx] = {
                             mu: genome.growthMu,
                             sigma: genome.growthSigma,
-                            weight: weight
+                            weight: weight,
+                            // Phase 7: Directional bias
+                            biasX: biasDirX,
+                            biasY: biasDirY
                         };
                     }
                 }
@@ -286,9 +302,10 @@ class FlowLenia {
      * Compute flow field using Sobel gradient estimation
      * F = ∇(affinity) - gradient of affinity map
      * Mass flows toward higher affinity (gradient ascent)
+     * Phase 7: Adds directional bias from creature genomes
      */
     computeGradient() {
-        const { size, affinity, Fx, Fy, flowStrength } = this;
+        const { size, affinity, Fx, Fy, flowStrength, A } = this;
 
         // Sobel kernels for gradient estimation
         // Sobel X: [-1, 0, 1; -2, 0, 2; -1, 0, 1] / 8
@@ -313,10 +330,23 @@ class FlowLenia {
                 const a_br = affinity[yp * size + xp];  // bottom-right
 
                 // Sobel gradient (note: we want gradient ascent, so positive toward higher values)
-                const gx = (-a_tl + a_tr - 2*a_ml + 2*a_mr - a_bl + a_br) / 8;
-                const gy = (-a_tl - 2*a_tc - a_tr + a_bl + 2*a_bc + a_br) / 8;
+                let gx = (-a_tl + a_tr - 2*a_ml + 2*a_mr - a_bl + a_br) / 8;
+                let gy = (-a_tl - 2*a_tc - a_tr + a_bl + 2*a_bc + a_br) / 8;
 
                 const idx = y * size + x;
+
+                // Phase 7: Add directional bias from creature morphology
+                // Only apply where there's significant mass and morphology influence
+                if (this.morphInfluenceCache && A[idx] > 0.1) {
+                    const influence = this.morphInfluenceCache[idx];
+                    if (influence.weight > 0.01) {
+                        // Scale bias by local mass density for natural movement
+                        const biasScale = A[idx] * influence.weight;
+                        gx += influence.biasX * biasScale;
+                        gy += influence.biasY * biasScale;
+                    }
+                }
+
                 Fx[idx] = gx * flowStrength;
                 Fy[idx] = gy * flowStrength;
             }
