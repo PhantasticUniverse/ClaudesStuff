@@ -307,7 +307,7 @@ class Environment {
         this.updateSignalField(this.alarmSignal, signalDecayRate, signalDiffusionRate, signalMaxDensity);
         this.updateSignalField(this.huntingSignal, signalDecayRate, signalDiffusionRate, signalMaxDensity);
         this.updateSignalField(this.matingSignal, signalDecayRate, signalDiffusionRate, signalMaxDensity);
-        this.updateSignalField(this.territorySignal, signalDecayRate * 0.5, signalDiffusionRate * 0.3, signalMaxDensity); // Territory persists longer
+        this.updateSignalField(this.territorySignal, signalDecayRate * 0.25, signalDiffusionRate * 0.2, signalMaxDensity); // Phase 15: Territory persists even longer (decay 0.25x instead of 0.5x)
     }
 
     /**

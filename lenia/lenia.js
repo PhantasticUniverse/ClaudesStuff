@@ -598,6 +598,13 @@ function draw() {
         drawZoneCenters();
     }
 
+    // Phase 15: Draw energy bars above creatures
+    if (typeof sensoryEnabled !== 'undefined' && sensoryEnabled &&
+        typeof evolutionEnabled !== 'undefined' && evolutionEnabled &&
+        typeof creatureTracker !== 'undefined' && creatureTracker) {
+        drawCreatureEnergyBars();
+    }
+
     // Update stats
     updateStats();
 }
@@ -732,6 +739,81 @@ function drawCreatureGlow() {
         // Inner bright core
         fill(signalColor[0], signalColor[1], signalColor[2], alpha * 2);
         ellipse(screenX, screenY, creature.radius * cellSize * 2, creature.radius * cellSize * 2);
+    }
+
+    pop();
+}
+
+/**
+ * Phase 15: Draw energy bars above each creature
+ * Color gradient: red (dying) → yellow → green (thriving)
+ */
+function drawCreatureEnergyBars() {
+    if (!creatureTracker || creatureTracker.count === 0) return;
+    if (!evolutionEnabled) return;  // Only show when evolution is active
+
+    const sim = flowLenia || lenia;
+    const cellSize = width / sim.size;
+
+    push();
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(8);
+
+    for (const creature of creatureTracker.getCreatures()) {
+        if (!creature.genome) continue;
+
+        const screenX = creature.x * cellSize;
+        const screenY = creature.y * cellSize;
+
+        // Position bar above creature
+        const barY = screenY - creature.radius * cellSize * 1.5 - 15;
+        const barWidth = 30;
+        const barHeight = 6;
+
+        // Calculate energy percentage (relative to reproduction threshold)
+        const maxEnergy = creature.genome.reproductionThreshold * 1.5;
+        const energyPercent = Math.min(1, creature.energy / maxEnergy);
+
+        // Color gradient: red (0) → yellow (0.5) → green (1)
+        let r, g, b;
+        if (energyPercent < 0.3) {
+            // Red zone (dying)
+            r = 255;
+            g = Math.floor(energyPercent / 0.3 * 100);
+            b = 0;
+        } else if (energyPercent < 0.6) {
+            // Yellow zone (low)
+            const t = (energyPercent - 0.3) / 0.3;
+            r = 255;
+            g = 100 + Math.floor(t * 155);
+            b = 0;
+        } else {
+            // Green zone (thriving)
+            const t = (energyPercent - 0.6) / 0.4;
+            r = Math.floor(255 * (1 - t));
+            g = 255;
+            b = Math.floor(t * 100);
+        }
+
+        // Draw background (dark)
+        fill(40, 40, 40, 180);
+        rect(screenX - barWidth / 2 - 1, barY - 1, barWidth + 2, barHeight + 2, 2);
+
+        // Draw energy fill
+        fill(r, g, b, 220);
+        const fillWidth = barWidth * energyPercent;
+        rect(screenX - barWidth / 2, barY, fillWidth, barHeight, 1);
+
+        // Draw energy number
+        fill(255, 255, 255, 200);
+        text(Math.floor(creature.energy), screenX, barY - 8);
+
+        // Add predator indicator
+        if (creature.genome.isPredator) {
+            fill(255, 100, 100);
+            text('🔴', screenX + barWidth / 2 + 8, barY + 3);
+        }
     }
 
     pop();

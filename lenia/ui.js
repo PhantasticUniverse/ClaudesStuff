@@ -36,6 +36,11 @@ let showFlockingOverlay = false;  // Phase 13: Flock link visualization
 let showMigrationTrails = false;  // Phase 14: Migration trail visualization
 let showZoneCenters = false;      // Phase 14: Zone center visualization
 
+// Phase 15: Population history for graphing (separate hunter/prey tracking)
+let hunterPopulationHistory = [];
+let preyPopulationHistory = [];
+const POPULATION_HISTORY_LENGTH = 500;
+
 function initUI() {
     // Initialize multi-channel, flow-lenia, and explorer systems
     multiChannel = new MultiChannelLenia(256, 2);
@@ -1509,6 +1514,100 @@ function updateEvolutionStats() {
     if (traitSeasonalEl && traits.seasonalAdaptation !== undefined) {
         traitSeasonalEl.textContent = traits.seasonalAdaptation.toFixed(3);
     }
+
+    // Phase 15: Update population history and draw graph
+    updatePopulationGraph(hunters, prey);
+}
+
+/**
+ * Phase 15: Update population history and draw the population graph
+ * @param {number} hunters - Current hunter count
+ * @param {number} prey - Current prey count
+ */
+function updatePopulationGraph(hunters, prey) {
+    // Add current counts to history
+    hunterPopulationHistory.push(hunters);
+    preyPopulationHistory.push(prey);
+
+    // Trim to max length
+    if (hunterPopulationHistory.length > POPULATION_HISTORY_LENGTH) {
+        hunterPopulationHistory.shift();
+    }
+    if (preyPopulationHistory.length > POPULATION_HISTORY_LENGTH) {
+        preyPopulationHistory.shift();
+    }
+
+    // Draw the graph
+    const canvas = document.getElementById('population-graph');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Clear canvas
+    ctx.fillStyle = '#0a0a0f';
+    ctx.fillRect(0, 0, width, height);
+
+    // Find max value for scaling
+    let maxPop = 1;
+    for (const v of hunterPopulationHistory) maxPop = Math.max(maxPop, v);
+    for (const v of preyPopulationHistory) maxPop = Math.max(maxPop, v);
+
+    // Add some padding to max
+    maxPop = Math.ceil(maxPop * 1.1);
+
+    // Draw grid lines
+    ctx.strokeStyle = '#2a2a3a';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = height - (i / 4) * height;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+
+    // Draw prey line (blue) - draw first so hunters appear on top
+    if (preyPopulationHistory.length > 1) {
+        ctx.strokeStyle = '#8af';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < preyPopulationHistory.length; i++) {
+            const x = (i / (POPULATION_HISTORY_LENGTH - 1)) * width;
+            const y = height - (preyPopulationHistory[i] / maxPop) * height;
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+    }
+
+    // Draw hunter line (red)
+    if (hunterPopulationHistory.length > 1) {
+        ctx.strokeStyle = '#f88';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < hunterPopulationHistory.length; i++) {
+            const x = (i / (POPULATION_HISTORY_LENGTH - 1)) * width;
+            const y = height - (hunterPopulationHistory[i] / maxPop) * height;
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+    }
+
+    // Draw current values as text
+    ctx.fillStyle = '#666';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(maxPop.toString(), width - 2, 12);
+    ctx.fillText('0', width - 2, height - 2);
 }
 
 /**

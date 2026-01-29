@@ -422,9 +422,10 @@ const Species = {
                 sizePreference: 1.0,
                 isPredator: false,
                 // Morphology: medium-sized, balanced
+                // Phase 15: Reduced growthSigma for tighter shape (was 0.025)
                 kernelRadius: 10,
                 growthMu: 0.18,
-                growthSigma: 0.025,
+                growthSigma: 0.018,
                 // Directional: symmetric forager
                 kernelBias: 0.05,
                 kernelOrientation: 0,
@@ -609,15 +610,16 @@ const Species = {
                 socialWeight: 1.5,
                 turnRate: 0.35,
                 speedPreference: 1.3,
-                metabolismRate: 0.03,    // Higher metabolism (active hunter)
-                reproductionThreshold: 60,
+                metabolismRate: 0.025,   // Reduced metabolism (was 0.03) for hunter sustainability
+                reproductionThreshold: 80, // Increased from 60 for slower population growth
                 reproductionCost: 0.65,
                 sizePreference: 1.3,
                 isPredator: true,
                 // Morphology: LARGE kernel radius for better prey detection
+                // Phase 15: Reduced growthSigma for tighter shape (was 0.028)
                 kernelRadius: 14,
                 growthMu: 0.24,
-                growthSigma: 0.028,
+                growthSigma: 0.020,
                 // Directional: HIGH bias for streamlined predator shape
                 kernelBias: 0.3,
                 kernelOrientation: 0,
@@ -708,14 +710,15 @@ const Species = {
                 turnRate: 0.4,
                 speedPreference: 1.4,
                 metabolismRate: 0.025,   // Higher metabolism (always moving)
-                reproductionThreshold: 35, // Reproduce quickly
+                reproductionThreshold: 45, // Increased from 35 to prevent population explosion
                 reproductionCost: 0.5,
                 sizePreference: 0.7,     // Stay small
                 isPredator: false,
                 // Morphology: SMALL kernel radius for faster, more agile movement
+                // Phase 15: Reduced growthSigma for tighter shape (was 0.03)
                 kernelRadius: 8,
                 growthMu: 0.16,
-                growthSigma: 0.03,
+                growthSigma: 0.022,
                 // Directional: LOW bias for maneuverability (can turn quickly)
                 kernelBias: 0.1,
                 kernelOrientation: 0,

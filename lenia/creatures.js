@@ -415,7 +415,7 @@ class CreatureTracker {
             maxPopulation: 30,        // Maximum creatures allowed
             deathBecomesFood: true,   // Dead creature mass becomes food
             minCreatureEnergy: 10,    // Minimum energy for new creatures
-            predationEnergy: 1.5      // Phase 10: Energy gained per unit prey mass consumed (higher to sustain hunters)
+            predationEnergy: 2.5      // Phase 10/15: Energy gained per unit prey mass consumed (increased from 1.5 for hunter sustainability)
         };
 
         // Phase 10: Ecosystem mode
@@ -836,10 +836,11 @@ class CreatureTracker {
             }
 
             // Territory signals - same species repelled, different attracted (or vice versa)
+            // Phase 15: Increased territory repulsion weight from 5 to 12 for better separation
             const territoryGrad = environment.getSignalGradient('territory', creature.x, creature.y);
             // Generally repelled from territory markings (spacing behavior)
-            senseX -= territoryGrad.x * genome.territorySensitivity * 5;
-            senseY -= territoryGrad.y * genome.territorySensitivity * 5;
+            senseX -= territoryGrad.x * genome.territorySensitivity * 12;
+            senseY -= territoryGrad.y * genome.territorySensitivity * 12;
         }
 
         // Phase 13: Homing behavior - attraction to birthplace when outside territory
@@ -894,6 +895,34 @@ class CreatureTracker {
                     senseY += Math.sin(exploreAngle) * exploreStrength;
                 }
             }
+        }
+
+        // Phase 15: Proximity repulsion - prevent creatures from merging
+        // Strong repulsion when creatures are very close (within 2x their combined radii)
+        if (genome) {
+            let repulsionX = 0, repulsionY = 0;
+            const myRadius = creature.radius || 5;
+
+            for (const other of this.creatures) {
+                if (other.id === creature.id) continue;
+
+                const dx = this.toroidalDelta(other.x, creature.x, this.size);
+                const dy = this.toroidalDelta(other.y, creature.y, this.size);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const otherRadius = other.radius || 5;
+                const minSeparation = (myRadius + otherRadius) * 2.0;
+
+                if (dist < minSeparation && dist > 0.1) {
+                    // Strong repulsion that increases as creatures get closer
+                    const overlap = 1 - (dist / minSeparation);
+                    const repulsionStrength = overlap * overlap * 20;  // Quadratic increase
+                    repulsionX -= (dx / dist) * repulsionStrength;
+                    repulsionY -= (dy / dist) * repulsionStrength;
+                }
+            }
+
+            senseX += repulsionX;
+            senseY += repulsionY;
         }
 
         // Phase 13: Flocking alignment (prey only - non-predators)
@@ -1227,12 +1256,20 @@ class CreatureTracker {
     /**
      * Check for reproduction and death conditions
      * Returns lists of creatures to reproduce and remove
+     * Phase 15: Added soft carrying capacity (density-dependent reproduction)
      */
     checkEvolutionEvents() {
         if (!this.evolution.enabled) return { reproduce: [], die: [] };
 
         const reproduce = [];
         const die = [];
+
+        // Phase 15: Calculate population density for soft carrying capacity
+        // When population is high relative to max, reproduction becomes harder
+        const populationDensity = this.creatures.length / this.evolution.maxPopulation;
+        // Reproduction threshold multiplier: starts at 1.0, increases as population grows
+        // At 50% capacity: 1.2x threshold, at 80% capacity: 1.8x threshold
+        const densityMultiplier = 1.0 + Math.pow(populationDensity, 2) * 1.5;
 
         for (const creature of this.creatures) {
             // Check for death
@@ -1241,8 +1278,16 @@ class CreatureTracker {
                 continue;
             }
 
-            // Check for reproduction
-            if (creature.canReproduce && this.creatures.length < this.evolution.maxPopulation) {
+            // Check for reproduction with soft carrying capacity
+            // Effective threshold increases as population grows
+            if (creature.genome) {
+                const effectiveThreshold = creature.genome.reproductionThreshold * densityMultiplier;
+                const canReproduceWithDensity = creature.energy >= effectiveThreshold;
+
+                if (canReproduceWithDensity && this.creatures.length < this.evolution.maxPopulation) {
+                    reproduce.push(creature);
+                }
+            } else if (creature.canReproduce && this.creatures.length < this.evolution.maxPopulation) {
                 reproduce.push(creature);
             }
 
