@@ -1,0 +1,167 @@
+# Lenia Explorer - Phase Reflections
+
+Detailed lessons learned, trade-offs, and insights from each development phase.
+
+---
+
+## Phase 5: Evolution & Reproduction
+
+### Offspring Viability in Flow-Lenia
+
+When implementing reproduction via mass splitting, offspring initially failed to survive. The root cause: newly created blobs need sufficient mass density to remain stable in Lenia's dynamics. Too weak and they dissipate within frames.
+
+**Lesson**: In Lenia, creature stability depends on the relationship between kernel parameters (R, mu, sigma) and local mass density. When splitting a creature, offspring need:
+- Adequate radius (at least 60-75% of parent)
+- Sufficient peak intensity (~0.5-0.6 at center)
+- Minimum absolute size (radius >= 6 pixels)
+
+### Energy Balance Matters
+
+The metabolism vs food-gain ratio determines whether populations can sustain themselves. If metabolism is too high relative to food energy, creatures starve before reproducing.
+
+**Default tuning**: Food Energy Gain should exceed Metabolism Rate by at least 3-5x for sustainable populations.
+
+### Flow-Lenia Merging Behavior
+
+Unlike discrete CA where creatures are separate entities, Flow-Lenia creatures can merge when they get close:
+- "Deaths" often appear as merges, not starvation
+- Population tends toward fewer, larger creatures
+- Reproduction must create sufficient separation between offspring
+
+---
+
+## Phase 6: Morphology Evolution
+
+### Soft Influence Approach
+
+Rather than computing per-creature kernels (expensive), we use a "soft influence" approach:
+1. Each creature's morphology genome defines preferred kernel parameters
+2. Affinity map computation blends global kernel params with local creature params
+3. Influence weight = creature density at that cell
+4. Stronger creatures (more mass) have more influence on local physics
+
+**Trade-off**: Less accurate than true per-creature kernels but much simpler and computationally feasible.
+
+### Morphology Drift
+
+Due to merging behavior, morphology drift is subtle:
+- Creatures that merge combine mass but lose distinct genomes
+- Populations tend to homogenize toward dominant morphology
+- Use negative social weight species for more diversity
+
+### Species-Specific Morphology
+
+- **Hunter**: Large R (14) for better prey detection
+- **Prey**: Small R (8) for faster, agile movement
+- **Grazer/Schooler**: Balanced medium R (10-11)
+
+---
+
+## Phase 7: Directional Creatures
+
+### Kernel Bias Implementation
+
+Two new genome parameters:
+- **kernelBias** (0-0.5): How asymmetric the creature is
+- **kernelOrientation** (radians): Which direction is "forward"
+
+Rather than computing asymmetric kernels per-creature, we add a directional bias term to the flow field.
+
+### Species Directional Profiles
+
+- **Hunter**: High bias (0.3) - streamlined, moves decisively
+- **Prey**: Low bias (0.1) - maneuverable, quick direction changes
+- **Grazer**: Minimal bias (0.05) - symmetric forager
+- **Schooler**: Mild bias (0.1) - coordinated movement
+
+---
+
+## Phase 8: Asymmetric Sensing
+
+### Cosine Weighting Implementation
+
+Two new genome parameters:
+- **sensorAngle** (radians): Direction of best sensing. 0 = forward, π = backward
+- **sensorFocus** (0-1): How focused the sensing is. 0 = isotropic, 1 = narrow cone
+
+Weight existing gradients by angular alignment rather than computing separate sensors per direction.
+
+### Species Sensing Profiles
+
+- **Hunter**: sensorAngle=0 (forward), sensorFocus=0.6 - focused forward cone
+- **Prey**: sensorAngle=π (backward), sensorFocus=0.4 - rear awareness
+- **Grazer**: sensorAngle=0, sensorFocus=0.1 - mostly isotropic
+- **Schooler**: sensorAngle=0, sensorFocus=0.2 - mild forward bias
+
+### Evolutionary Pressure
+
+- Hunters with tighter forward focus catch more prey
+- Prey with wider rear awareness survive longer
+- Over generations, expect specialization
+
+---
+
+## Phase 10: Predator-Prey Ecosystem
+
+### Implementation Challenges
+
+**Genome Assignment Ordering**: Fixed by checking `ecosystemMode` first and using separate `assignEcosystemGenomes()` method.
+
+**Creature Size Detection**: Track pending hunter/prey counts from initial spawn; assign largest unassigned creatures as hunters.
+
+**Predation Difficulty**: Prey have negative social weight (-0.8) and backward sensing. Hunters have positive social weight (1.5) and forward sensing.
+
+### Energy Balance for Hunters
+
+Hunters face unique challenges:
+- Can't eat food (foodWeight: 0.0)
+- Higher metabolism (0.03 vs 0.025 for prey)
+- Must catch prey to survive
+
+Compensation:
+- 2x starting energy
+- High predation energy gain (1.5x prey mass)
+- Generous catch radius
+
+---
+
+## Phase 11: Creature Memory & Spatial Learning
+
+### Memory Architecture
+
+Each creature maintains a coarse 8x8 spatial memory grid:
+- **Food memories**: Positive associations where food was consumed
+- **Danger memories**: Negative associations where predators were nearby
+
+The grid is much smaller than the world, creating "regions" of memory rather than exact positions.
+
+### Memory Gradient Integration
+
+1. Compute net memory value at nearby locations (food - danger)
+2. Generate gradient toward positive / away from negative
+3. Blend with sensory gradients based on `memoryWeight`
+
+### Species Memory Profiles
+
+- **Grazer**: memoryWeight=0.6, memoryDecay=0.995 - Strong food memory
+- **Prey**: memoryWeight=0.5, memoryDecay=0.98 - Strong danger memory
+- **Hunter**: memoryWeight=0.4, memoryDecay=0.99 - Moderate memory
+- **Schooler**: memoryWeight=0.2, memoryDecay=0.995 - Mild memory
+
+### Memory Inheritance
+
+Offspring inherit 50% of parent's memory - "cultural transmission" of good/bad locations.
+
+### Bug Fix: Mass Conservation During Reproduction
+
+Critical bug: mass increased +3700% during reproduction.
+
+**Root cause**: `processReproduction()` called `drawBlob()` which ADDS mass after only partially reducing parent mass.
+
+**Fix**: Remove ALL parent mass, then redistribute exactly that amount to two offspring blobs via normalized patterns.
+
+### Observing Memory Effects
+
+Best observed with:
+- Single creature + food (watch for return visits)
+- Ecosystem mode with evolution (watch prey avoidance patterns)

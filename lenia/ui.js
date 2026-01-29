@@ -1253,6 +1253,12 @@ function updateEvolutionStats() {
     if (traitSensorFocusEl && traits.sensorFocus !== undefined) {
         traitSensorFocusEl.textContent = traits.sensorFocus.toFixed(3);
     }
+
+    // Phase 11: Memory weight averages
+    const traitMemoryWeightEl = document.getElementById('stat-trait-memory-weight');
+    if (traitMemoryWeightEl && traits.memoryWeight !== undefined) {
+        traitMemoryWeightEl.textContent = traits.memoryWeight.toFixed(3);
+    }
 }
 
 /**

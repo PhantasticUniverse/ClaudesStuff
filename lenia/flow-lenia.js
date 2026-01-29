@@ -620,35 +620,55 @@ class FlowLenia {
         const mass1 = totalMass * ratio1;
         const mass2 = totalMass * (1 - ratio1);
 
-        // Redistribute mass by adjusting cell values toward two centers
-        // This creates a natural "pinching" effect
+        // Mass-conserving reproduction: redistribute parent mass to two offspring
+        // First, remove all parent mass
         for (const cell of parentCells) {
-            const dx1 = this.toroidalDelta(cell.x, pos1.x, size);
-            const dy1 = this.toroidalDelta(cell.y, pos1.y, size);
-            const dist1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
-
-            const dx2 = this.toroidalDelta(cell.x, pos2.x, size);
-            const dy2 = this.toroidalDelta(cell.y, pos2.y, size);
-            const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-
-            // Weight assignment based on distance to each offspring center
-            const w1 = 1 / (1 + dist1);
-            const w2 = 1 / (1 + dist2);
-            const total = w1 + w2;
-
-            // Reduce mass at cell based on distance to both centers
-            // Cells closer to center points keep more mass
-            const currentMass = A[cell.idx];
-            const keepFactor = Math.max(w1, w2) / total * 0.95;
-            A[cell.idx] = currentMass * keepFactor;
+            A[cell.idx] = 0;
         }
 
-        // Add substantial mass at the two new centers for viable offspring
-        // Use larger radius and higher intensity for survival
-        // Note: drawBlob internally multiplies by 0.3, so pass ~2.0 for ~0.6 peak
+        // Create blob patterns for offspring and calculate normalization
         const offspringRadius = Math.max(parent.radius * 0.75, 6);
-        this.drawBlob(pos1.x, pos1.y, offspringRadius, 2.0);
-        this.drawBlob(pos2.x, pos2.y, offspringRadius, 2.0);
+
+        // Generate blob patterns centered at each offspring position
+        const blob1Cells = [];
+        const blob2Cells = [];
+        let blob1Total = 0;
+        let blob2Total = 0;
+
+        for (let dy = -offspringRadius; dy <= offspringRadius; dy++) {
+            for (let dx = -offspringRadius; dx <= offspringRadius; dx++) {
+                const dist = Math.sqrt(dx * dx + dy * dy) / offspringRadius;
+                if (dist <= 1) {
+                    const weight = (1 - dist * dist); // Smooth falloff
+
+                    // Blob 1
+                    const gx1 = (Math.floor(pos1.x) + dx + size) % size;
+                    const gy1 = (Math.floor(pos1.y) + dy + size) % size;
+                    const idx1 = gy1 * size + gx1;
+                    blob1Cells.push({ idx: idx1, weight });
+                    blob1Total += weight;
+
+                    // Blob 2
+                    const gx2 = (Math.floor(pos2.x) + dx + size) % size;
+                    const gy2 = (Math.floor(pos2.y) + dy + size) % size;
+                    const idx2 = gy2 * size + gx2;
+                    blob2Cells.push({ idx: idx2, weight });
+                    blob2Total += weight;
+                }
+            }
+        }
+
+        // Distribute mass proportionally to each offspring
+        // Normalize so total distributed = totalMass (mass conservation)
+        const scale1 = mass1 / blob1Total;
+        const scale2 = mass2 / blob2Total;
+
+        for (const cell of blob1Cells) {
+            A[cell.idx] = Math.min(1, A[cell.idx] + cell.weight * scale1);
+        }
+        for (const cell of blob2Cells) {
+            A[cell.idx] = Math.min(1, A[cell.idx] + cell.weight * scale2);
+        }
 
         // Note: The actual offspring creatures will be detected and registered
         // by the creature tracker in the next frame when it scans for connected
