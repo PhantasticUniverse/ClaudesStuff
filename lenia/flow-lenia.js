@@ -1,5 +1,5 @@
 /**
- * Flow-Lenia Implementation
+ * Flow-Lenia Implementation - Phase 5: Evolving Creatures
  *
  * Flow-Lenia transforms standard Lenia from "matter appearing/disappearing"
  * to "matter flowing" - creating creatures that feel more physical and solid.
@@ -10,11 +10,29 @@
  * - Matter then flows toward high-affinity regions via gradient descent
  * - Total mass is conserved through reintegration tracking
  *
+ * Phase 4 additions:
+ * - Environmental layers (food, pheromones, currents)
+ * - Creature detection and tracking
+ * - Sensory-driven steering (creatures respond to environment)
+ * - Persistent heading with smooth turning
+ *
+ * Phase 5 additions:
+ * - Creatures have genomes with heritable parameters
+ * - Energy system: gain from food, lose from metabolism
+ * - Reproduction: when energy > threshold, creature splits
+ * - Death: when energy <= 0, creature dies
+ * - Natural selection: successful traits spread through population
+ *
  * Algorithm:
- * 1. Compute potential U = K * A (same as standard Lenia)
- * 2. Compute affinity map: affinity = G(U) - growth function as affinity
- * 3. Compute flow field F = ∇(affinity) using Sobel filter
- * 4. Transport mass using reintegration tracking (mass-conservative)
+ * 1. Update environment (food regrows, pheromones decay)
+ * 2. Detect and track creatures
+ * 3. Update creature energy (metabolism, food consumption)
+ * 4. Process reproduction and death events
+ * 5. Compute sensory inputs and update headings
+ * 6. Compute potential U = K * A (same as standard Lenia)
+ * 7. Compute affinity map: affinity = G(U)
+ * 8. Compute flow field F = ∇(affinity) + steering
+ * 9. Transport mass using reintegration tracking (mass-conservative)
  *
  * References:
  * - Flow-Lenia Paper: https://direct.mit.edu/artl/article/31/2/228/130572/
@@ -46,6 +64,10 @@ class FlowLenia {
         this.flowStrength = 1.0;   // How strongly mass follows the gradient (0.5 - 2.0)
         this.diffusion = 0.1;      // Diffusion rate to prevent mass collapse (0.0 - 0.3)
 
+        // Phase 4: Sensory parameters
+        this.sensoryEnabled = false;  // Enable sensory creature mode
+        this.steeringStrength = 0.5;  // How much steering affects flow (0-1)
+
         // Kernel configuration
         this.kernelType = 'ring';
         this.kernelParams = {
@@ -62,6 +84,11 @@ class FlowLenia {
 
         this.kernel = null;
         this.colorMap = 'viridis';
+
+        // Phase 4: Environment and creature tracking (initialized externally)
+        this.environment = null;
+        this.creatureTracker = null;
+        this.frameNumber = 0;
 
         this.updateKernel();
     }
@@ -318,11 +345,277 @@ class FlowLenia {
      * Main simulation step
      */
     step() {
+        this.frameNumber++;
+
+        // Phase 4: Update environment if enabled
+        if (this.sensoryEnabled && this.environment) {
+            this.environment.update(this.A);
+        }
+
+        // Phase 4: Detect and track creatures if enabled
+        if (this.sensoryEnabled && this.creatureTracker) {
+            this.creatureTracker.update(this.A, this.frameNumber);
+
+            // Phase 5: Match pending offspring with newly detected creatures
+            if (this.pendingOffspring && this.pendingOffspring.length > 0) {
+                this.matchPendingOffspring();
+            }
+
+            // Phase 5: Evolution - update energy and check for events
+            if (this.creatureTracker.evolution.enabled) {
+                // Assign genomes to any creatures that don't have one
+                for (const creature of this.creatureTracker.creatures) {
+                    if (!creature.genome) {
+                        this.creatureTracker.assignDefaultGenome(creature);
+                    }
+                }
+
+                // Update energy (metabolism + food consumption)
+                this.creatureTracker.updateEnergy(this.environment);
+
+                // Check for reproduction and death
+                const events = this.creatureTracker.checkEvolutionEvents();
+
+                // Process deaths
+                for (const creature of events.die) {
+                    this.creatureTracker.processDeath(creature, this.environment);
+                }
+
+                // Remove dead creatures
+                this.creatureTracker.creatures = this.creatureTracker.creatures.filter(
+                    c => c.energy > 0
+                );
+
+                // Process reproductions
+                for (const parent of events.reproduce) {
+                    this.processReproduction(parent);
+                }
+
+                // Update statistics
+                this.creatureTracker.updateStats();
+            }
+
+            this.creatureTracker.updateCreatureHeadings(this.environment);
+        }
+
         this.computePotential();   // U = K * A
         this.computeAffinity();    // affinity = G(U)
         this.computeGradient();    // F = ∇(affinity)
+
+        // Phase 4: Add steering forces from creatures
+        if (this.sensoryEnabled && this.creatureTracker) {
+            this.applySteeringForces();
+        }
+
         this.transportMass();      // Mass-conservative transport
         this.applyDiffusion();     // Laplacian diffusion to prevent collapse
+    }
+
+    /**
+     * Phase 4: Apply steering forces from creature headings to flow field
+     */
+    applySteeringForces() {
+        if (!this.creatureTracker || this.steeringStrength === 0) return;
+
+        const { size, Fx, Fy, steeringStrength } = this;
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const idx = y * size + x;
+
+                // Only apply steering where there's mass
+                if (this.A[idx] < 0.1) continue;
+
+                const steering = this.creatureTracker.getSteeringForce(x, y);
+                Fx[idx] += steering.x * steeringStrength;
+                Fy[idx] += steering.y * steeringStrength;
+            }
+        }
+    }
+
+    /**
+     * Phase 5: Process reproduction - split a creature's mass into two offspring
+     * @param {Creature} parent - Parent creature to reproduce
+     */
+    processReproduction(parent) {
+        if (!this.creatureTracker) return;
+
+        // Get offspring data from creature tracker
+        const offspringData = this.creatureTracker.processReproduction(
+            parent, this.frameNumber
+        );
+        if (!offspringData) return;
+
+        const { size, A } = this;
+
+        // Calculate split direction (perpendicular to heading)
+        const splitAngle = parent.heading + Math.PI / 2;
+        const splitDist = parent.radius * 0.7;
+
+        // Offspring positions
+        const pos1 = {
+            x: (parent.x + Math.cos(splitAngle) * splitDist + size) % size,
+            y: (parent.y + Math.sin(splitAngle) * splitDist + size) % size
+        };
+        const pos2 = {
+            x: (parent.x - Math.cos(splitAngle) * splitDist + size) % size,
+            y: (parent.y - Math.sin(splitAngle) * splitDist + size) % size
+        };
+
+        // Redistribute parent's mass to two locations
+        // First, collect all mass from parent's cells
+        let totalMass = 0;
+        const parentCells = [];
+
+        for (const cell of parent.cells) {
+            const idx = Math.floor(cell.y) * size + Math.floor(cell.x);
+            if (idx >= 0 && idx < A.length) {
+                totalMass += A[idx];
+                parentCells.push({ x: cell.x, y: cell.y, idx });
+            }
+        }
+
+        // Split mass ratio (roughly 50/50 with some variation)
+        const ratio1 = 0.45 + Math.random() * 0.1;
+        const mass1 = totalMass * ratio1;
+        const mass2 = totalMass * (1 - ratio1);
+
+        // Redistribute mass by adjusting cell values toward two centers
+        // This creates a natural "pinching" effect
+        for (const cell of parentCells) {
+            const dx1 = this.toroidalDelta(cell.x, pos1.x, size);
+            const dy1 = this.toroidalDelta(cell.y, pos1.y, size);
+            const dist1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+
+            const dx2 = this.toroidalDelta(cell.x, pos2.x, size);
+            const dy2 = this.toroidalDelta(cell.y, pos2.y, size);
+            const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+
+            // Weight assignment based on distance to each offspring center
+            const w1 = 1 / (1 + dist1);
+            const w2 = 1 / (1 + dist2);
+            const total = w1 + w2;
+
+            // Reduce mass at cell based on distance to both centers
+            // Cells closer to center points keep more mass
+            const currentMass = A[cell.idx];
+            const keepFactor = Math.max(w1, w2) / total * 0.95;
+            A[cell.idx] = currentMass * keepFactor;
+        }
+
+        // Add substantial mass at the two new centers for viable offspring
+        // Use larger radius and higher intensity for survival
+        // Note: drawBlob internally multiplies by 0.3, so pass ~2.0 for ~0.6 peak
+        const offspringRadius = Math.max(parent.radius * 0.75, 6);
+        this.drawBlob(pos1.x, pos1.y, offspringRadius, 2.0);
+        this.drawBlob(pos2.x, pos2.y, offspringRadius, 2.0);
+
+        // Note: The actual offspring creatures will be detected and registered
+        // by the creature tracker in the next frame when it scans for connected
+        // components. The offspring data is stored so we can assign genomes
+        // when those creatures are detected.
+
+        // Store pending offspring data for matching
+        if (!this.pendingOffspring) {
+            this.pendingOffspring = [];
+        }
+        this.pendingOffspring.push({
+            data: offspringData,
+            positions: [pos1, pos2],
+            frame: this.frameNumber,
+            assigned: [false, false]
+        });
+
+        // Clean up old pending offspring (more than 5 frames old)
+        this.pendingOffspring = this.pendingOffspring.filter(
+            o => this.frameNumber - o.frame < 5
+        );
+    }
+
+    /**
+     * Helper: compute toroidal delta (shortest path direction)
+     */
+    toroidalDelta(to, from, size) {
+        let delta = to - from;
+        if (delta > size / 2) delta -= size;
+        if (delta < -size / 2) delta += size;
+        return delta;
+    }
+
+    /**
+     * Phase 5: Match newly detected creatures with pending offspring
+     * Called after creature detection to assign genomes to offspring
+     */
+    matchPendingOffspring() {
+        if (!this.pendingOffspring || !this.creatureTracker) return;
+
+        const tracker = this.creatureTracker;
+
+        for (const pending of this.pendingOffspring) {
+            for (let i = 0; i < 2; i++) {
+                if (pending.assigned[i]) continue;
+
+                const pos = pending.positions[i];
+
+                // Find closest unassigned creature near this position
+                let bestCreature = null;
+                let bestDist = 20; // Max match distance
+
+                for (const creature of tracker.creatures) {
+                    // Skip creatures that already have genomes from a parent
+                    if (creature.genome && creature.parentId !== null) continue;
+                    // Skip creatures that were around before this reproduction
+                    if (creature.birthFrame < pending.frame) continue;
+
+                    const dx = this.toroidalDelta(creature.x, pos.x, this.size);
+                    const dy = this.toroidalDelta(creature.y, pos.y, this.size);
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestCreature = creature;
+                    }
+                }
+
+                if (bestCreature) {
+                    // Assign genome and metadata from offspring data
+                    const offspringInfo = pending.data.offspring[i];
+                    bestCreature.genome = offspringInfo.genome;
+                    bestCreature.energy = offspringInfo.energy;
+                    bestCreature.generation = offspringInfo.generation;
+                    bestCreature.parentId = pending.data.parentId;
+                    bestCreature.birthFrame = pending.frame;
+
+                    pending.assigned[i] = true;
+                }
+            }
+        }
+
+        // Remove fully assigned pending offspring
+        this.pendingOffspring = this.pendingOffspring.filter(
+            o => !o.assigned[0] || !o.assigned[1]
+        );
+    }
+
+    /**
+     * Set environment reference
+     */
+    setEnvironment(environment) {
+        this.environment = environment;
+    }
+
+    /**
+     * Set creature tracker reference
+     */
+    setCreatureTracker(tracker) {
+        this.creatureTracker = tracker;
+    }
+
+    /**
+     * Enable/disable sensory mode
+     */
+    setSensoryMode(enabled) {
+        this.sensoryEnabled = enabled;
     }
 
     /**
@@ -341,6 +634,15 @@ class FlowLenia {
      */
     clear() {
         this.A.fill(0);
+        this.frameNumber = 0;
+
+        // Reset environment and creature tracker
+        if (this.environment) {
+            this.environment.reset();
+        }
+        if (this.creatureTracker) {
+            this.creatureTracker.clear();
+        }
     }
 
     /**
@@ -491,6 +793,14 @@ class FlowLenia {
                 const oy = Math.min(Math.floor(y * scale), oldSize - 1);
                 this.A[y * newSize + x] = oldA[oy * oldSize + ox];
             }
+        }
+
+        // Resize environment and creature tracker if present
+        if (this.environment) {
+            this.environment.resize(newSize);
+        }
+        if (this.creatureTracker) {
+            this.creatureTracker.resize(newSize);
         }
     }
 

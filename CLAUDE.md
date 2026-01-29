@@ -1,73 +1,112 @@
 # ClaudesStuff - Project Context
 
-This repository contains creative coding experiments and explorations developed collaboratively with Claude. The primary focus is on artificial life simulations, generative art, and computational creativity.
+Creative coding experiments with Claude. Focus: artificial life, generative art, computational creativity.
 
 ## Current Project: Lenia Explorer
 
-Lenia Explorer is an interactive web-based implementation of Lenia, a continuous cellular automaton that produces lifelike artificial creatures.
+Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-### Project Status: Phase 3 Complete
+### Status: Phase 5 Complete
 
-- **Phase 1**: Core Lenia simulation with multiple kernel types
-- **Phase 2**: Multi-channel ecosystems with interaction matrices, creature discovery tools
-- **Phase 3**: Flow-Lenia with mass-conservative dynamics (current)
+1. Core Lenia with multiple kernel types
+2. Multi-channel ecosystems
+3. Flow-Lenia (mass-conservative)
+4. Sensory creatures & environments
+5. **Evolving creatures** - genome inheritance, energy system, reproduction
 
 ### Key Files
 
 ```
 lenia/
-├── index.html       # Main UI and layout
-├── lenia.js         # Core Lenia class and p5.js setup
-├── flow-lenia.js    # Flow-Lenia with mass conservation
-├── kernels.js       # Kernel generation (ring, gaussian, spiral, etc.)
-├── species.js       # Species presets (including flow species)
-├── multi-channel.js # Multi-channel ecosystem simulation
-├── explorer.js      # Parameter exploration and evolution
-├── recorder.js      # WebM/GIF recording
-└── ui.js           # UI controls and handlers
+├── index.html       # UI
+├── lenia.js         # Core + p5.js rendering
+├── flow-lenia.js    # Mass-conservative flow dynamics
+├── environment.js   # Food, pheromones, currents
+├── creatures.js     # Detection & tracking
+├── kernels.js       # Kernel generation
+├── species.js       # Presets (standard, flow, sensory)
+├── multi-channel.js # Ecosystem simulation
+├── explorer.js      # Parameter search
+├── recorder.js      # Video/GIF export
+└── ui.js            # Controls
 ```
 
-### Technical Notes
+### Running
 
-**Flow-Lenia Algorithm**:
-1. Compute potential U = K * A (convolution)
-2. Compute affinity map using growth function G(U)
-3. Compute flow field F = ∇(affinity) via Sobel filter
-4. Transport mass using reintegration tracking (bilinear interpolation)
-
-**Mass Conservation**: Flow-Lenia conserves total mass exactly (within floating-point precision). The mass stats panel shows conservation quality.
-
-### Development Guidelines
-
-- Use p5.js for rendering (loaded from CDN)
-- All simulation logic in vanilla JavaScript
-- UI uses native DOM elements (no frameworks)
-- Parameters should be adjustable via sliders in real-time
-- Color maps use interpolated palettes (viridis, plasma, etc.)
-
-### Running Locally
-
-Open `lenia/index.html` in a modern browser. No build step required.
-
-For live reload during development:
 ```bash
+# Just open in browser - no build needed
+open lenia/index.html
+
+# Or with live reload
 npx live-server lenia/
 ```
 
-### References
+---
 
-- [Original Lenia Paper](https://arxiv.org/abs/1812.05433) - Chan, 2018
-- [Flow-Lenia Paper](https://arxiv.org/abs/2212.07906) - Plantec et al., 2023
-- [Lenia Portal](https://chakazul.github.io/lenia.html) - Interactive demos
+## Best Practices
+
+### Always Test Visually
+
+After any change, open the browser and verify:
+- Does it render without console errors?
+- Does the simulation run smoothly?
+- Do the new controls work?
+- Does the expected behavior appear?
+
+**Don't ship code you haven't watched run.**
+
+### Keep It Simple
+
+- Vanilla JS only (no build tools, no frameworks)
+- p5.js for rendering
+- Native DOM for UI
+- Each file has one responsibility
+
+### Incremental Changes
+
+1. Make one change
+2. Test it visually in the browser
+3. Confirm it works
+4. Update this CLAUDE.md if needed
+5. Commit and push
+6. Then add the next thing
+
+### Parameter Design
+
+- All params adjustable via sliders
+- Sane defaults that show interesting behavior
+- Ranges that avoid crashes (no div-by-zero, etc.)
 
 ---
 
-## Collaboration Style
+## References
 
-This project evolves through conversational collaboration. Features are discussed, planned, and implemented iteratively. The goal is exploration and learning, not just building software.
+- [Lenia Paper](https://arxiv.org/abs/1812.05433) - Chan, 2018
+- [Flow-Lenia Paper](https://arxiv.org/abs/2212.07906) - Plantec et al., 2023
+- [Lenia Portal](https://chakazul.github.io/lenia.html)
 
-Key principles:
-- **Curiosity-driven**: Follow interesting directions, even if they deviate from the plan
-- **Visual feedback**: Always prioritize being able to see what the simulation is doing
-- **Incremental complexity**: Add features one at a time, test, then build on top
-- **Conservation laws**: Flow-Lenia demonstrates that constraints (mass conservation) can enable emergent behavior
+---
+
+## Reflections (Phase 5)
+
+### Offspring Viability in Flow-Lenia
+
+When implementing reproduction via mass splitting, offspring initially failed to survive. The root cause: newly created blobs need sufficient mass density to remain stable in Lenia's dynamics. Too weak and they dissipate within frames.
+
+**Lesson**: In Lenia, creature stability depends on the relationship between kernel parameters (R, mu, sigma) and local mass density. When splitting a creature, offspring need:
+- Adequate radius (at least 60-75% of parent)
+- Sufficient peak intensity (~0.5-0.6 at center)
+- Minimum absolute size (radius >= 6 pixels)
+
+### Energy Balance Matters
+
+The metabolism vs food-gain ratio determines whether populations can sustain themselves. If metabolism is too high relative to food energy, creatures starve before reproducing. Finding the right balance is key to observing natural selection.
+
+**Default tuning suggestion**: Food Energy Gain should exceed Metabolism Rate by at least 3-5x for sustainable populations.
+
+### Flow-Lenia Creates Merging Behavior
+
+Unlike discrete CA where creatures are separate entities, Flow-Lenia creatures can merge when they get close. This means:
+- "Deaths" often appear as merges, not starvation
+- Population tends toward fewer, larger creatures
+- Reproduction must create sufficient separation between offspring

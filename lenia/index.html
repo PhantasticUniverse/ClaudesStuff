@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lenia Explorer - Phase 3: Flow-Lenia</title>
+    <title>Lenia Explorer - Phase 5: Evolving Creatures</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
     <style>
@@ -386,7 +386,7 @@
         <div id="canvas-container"></div>
         <div id="controls">
             <h1>LENIA EXPLORER</h1>
-            <p class="subtitle">Phase 3 - Flow-Lenia & Mass Conservation</p>
+            <p class="subtitle">Phase 5 - Evolving Creatures</p>
 
             <!-- Mode Tabs -->
             <div class="mode-tabs">
@@ -423,6 +423,12 @@
                             <option value="vortex">Vortex (Flow)</option>
                             <option value="droplet">Droplet (Flow)</option>
                         </optgroup>
+                        <optgroup label="Sensory Creatures" id="sensory-species-group">
+                            <option value="grazer">Grazer (Sensory)</option>
+                            <option value="schooler">Schooler (Sensory)</option>
+                            <option value="hunter">Hunter (Sensory)</option>
+                            <option value="prey">Prey (Sensory)</option>
+                        </optgroup>
                         <option value="custom">Custom Parameters</option>
                     </select>
                 </div>
@@ -441,6 +447,133 @@
                         <div>Initial Mass: <span id="stat-initial-mass">0</span></div>
                         <div>Current Mass: <span id="stat-current-mass">0</span></div>
                         <div>Conservation: <span id="stat-mass-delta">0%</span></div>
+                    </div>
+                </div>
+
+                <!-- Phase 4: Sensory Creatures -->
+                <div class="section" id="sensory-section" style="display: none;">
+                    <div class="section-title">Sensory Mode</div>
+                    <div class="button-row" style="margin-bottom: 12px;">
+                        <button id="btn-sensory-off" class="primary">Off</button>
+                        <button id="btn-sensory-on">Enable Sensors</button>
+                    </div>
+                    <div id="sensory-indicator" style="display: none; font-size: 0.75em; color: #5f5; margin-bottom: 10px;">
+                        <strong>Sensory Mode Active</strong> - Creatures respond to environment
+                    </div>
+                </div>
+
+                <div class="section" id="environment-section" style="display: none;">
+                    <div class="section-title">Environment</div>
+                    <div class="control-group">
+                        <label>Food Spawn Rate <span class="value-display" id="food-spawn-value">0.002</span></label>
+                        <input type="range" id="food-spawn" min="0" max="0.01" value="0.002" step="0.001">
+                    </div>
+                    <div class="control-group">
+                        <label>Pheromone Decay <span class="value-display" id="pheromone-decay-value">0.01</span></label>
+                        <input type="range" id="pheromone-decay" min="0.001" max="0.1" value="0.01" step="0.001">
+                    </div>
+                    <div class="control-group">
+                        <label>Current Strength <span class="value-display" id="current-strength-value">0.0</span></label>
+                        <input type="range" id="current-strength" min="0" max="1" value="0" step="0.05">
+                    </div>
+                    <div class="control-group">
+                        <label>Current Angle <span class="value-display" id="current-angle-value">0</span>°</label>
+                        <input type="range" id="current-angle" min="0" max="360" value="0" step="15">
+                    </div>
+                    <div class="button-row">
+                        <button id="btn-add-food">Add Food</button>
+                        <button id="btn-reset-env">Reset Env</button>
+                    </div>
+                </div>
+
+                <div class="section" id="creature-behavior-section" style="display: none;">
+                    <div class="section-title">Creature Behavior</div>
+                    <div class="control-group">
+                        <label>Food Attraction <span class="value-display" id="food-weight-value">1.0</span></label>
+                        <input type="range" id="food-weight" min="-1" max="2" value="1.0" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label>Pheromone Attraction <span class="value-display" id="pheromone-weight-value">0.5</span></label>
+                        <input type="range" id="pheromone-weight" min="-1" max="2" value="0.5" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label>Social Attraction <span class="value-display" id="social-weight-value">0.3</span></label>
+                        <input type="range" id="social-weight" min="-1" max="2" value="0.3" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label>Turn Rate <span class="value-display" id="turn-rate-value">0.15</span></label>
+                        <input type="range" id="turn-rate" min="0.01" max="0.5" value="0.15" step="0.01">
+                    </div>
+                    <div class="control-group">
+                        <label>Steering Strength <span class="value-display" id="steering-strength-value">0.5</span></label>
+                        <input type="range" id="steering-strength" min="0" max="1" value="0.5" step="0.05">
+                    </div>
+                    <div class="button-row">
+                        <button id="btn-predator-mode">Predator Mode</button>
+                    </div>
+                </div>
+
+                <div class="section" id="visualization-section" style="display: none;">
+                    <div class="section-title">Visualization Overlays</div>
+                    <div class="button-row">
+                        <button id="btn-show-food" class="primary">Food</button>
+                        <button id="btn-show-pheromone">Trails</button>
+                        <button id="btn-show-headings">Headings</button>
+                    </div>
+                    <div class="stats" style="margin-top: 10px;">
+                        <div>Creatures: <span id="stat-creatures">0</span></div>
+                        <div>Food: <span id="stat-food">0</span></div>
+                    </div>
+                </div>
+
+                <!-- Phase 5: Evolution -->
+                <div class="section" id="evolution-section" style="display: none;">
+                    <div class="section-title">Evolution</div>
+                    <div class="button-row" style="margin-bottom: 12px;">
+                        <button id="btn-evolution-off" class="primary">Off</button>
+                        <button id="btn-evolution-on">Enable Evolution</button>
+                    </div>
+                    <div id="evolution-indicator" style="display: none; font-size: 0.75em; color: #f80; margin-bottom: 10px;">
+                        <strong>Evolution Active</strong> - Creatures reproduce and evolve
+                    </div>
+                    <div class="control-group">
+                        <label>Mutation Rate <span class="value-display" id="mutation-rate-value">0.1</span></label>
+                        <input type="range" id="mutation-rate" min="0.01" max="0.3" value="0.1" step="0.01">
+                    </div>
+                    <div class="control-group">
+                        <label>Metabolism Rate <span class="value-display" id="metabolism-rate-value">0.02</span></label>
+                        <input type="range" id="metabolism-rate" min="0.005" max="0.1" value="0.02" step="0.005">
+                    </div>
+                    <div class="control-group">
+                        <label>Reproduction Threshold <span class="value-display" id="reproduction-threshold-value">50</span></label>
+                        <input type="range" id="reproduction-threshold" min="20" max="100" value="50" step="5">
+                    </div>
+                    <div class="control-group">
+                        <label>Max Population <span class="value-display" id="max-population-value">30</span></label>
+                        <input type="range" id="max-population" min="5" max="50" value="30" step="5">
+                    </div>
+                    <div class="control-group">
+                        <label>Food Energy Gain <span class="value-display" id="food-energy-value">0.5</span></label>
+                        <input type="range" id="food-energy" min="0.1" max="2.0" value="0.5" step="0.1">
+                    </div>
+                </div>
+
+                <div class="section" id="evolution-stats-section" style="display: none;">
+                    <div class="section-title">Evolution Statistics</div>
+                    <div class="stats">
+                        <div>Population: <span id="stat-population">0</span></div>
+                        <div>Highest Gen: <span id="stat-highest-gen">0</span></div>
+                        <div>Avg Gen: <span id="stat-avg-gen">0</span></div>
+                        <div>Avg Energy: <span id="stat-avg-energy">0</span></div>
+                        <div>Births: <span id="stat-births">0</span></div>
+                        <div>Deaths: <span id="stat-deaths">0</span></div>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 0.75em; color: #888;">
+                        <strong>Trait Averages:</strong>
+                        <div>Food: <span id="stat-trait-food">0</span></div>
+                        <div>Pheromone: <span id="stat-trait-pheromone">0</span></div>
+                        <div>Social: <span id="stat-trait-social">0</span></div>
+                        <div>Turn Rate: <span id="stat-trait-turn">0</span></div>
                     </div>
                 </div>
             </div>
@@ -695,6 +828,8 @@
     <script src="multi-channel.js"></script>
     <script src="explorer.js"></script>
     <script src="recorder.js"></script>
+    <script src="environment.js"></script>
+    <script src="creatures.js"></script>
     <script src="flow-lenia.js"></script>
     <script src="lenia.js"></script>
     <script src="ui.js"></script>

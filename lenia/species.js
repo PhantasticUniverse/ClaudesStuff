@@ -371,6 +371,282 @@ const Species = {
         })()
     },
 
+    // ==================== Sensory Species (Phase 4) ====================
+    // These species are optimized for sensory-driven behavior with environmental awareness
+
+    /**
+     * Grazer - Strong food attraction, mild social avoidance
+     * Slowly moves toward food sources, maintains distance from other grazers
+     */
+    grazer: {
+        name: "Grazer",
+        description: "Grazes on food sources, avoids crowding with other creatures.",
+        params: {
+            R: 10,
+            peaks: 1,
+            mu: 0.20,
+            sigma: 0.032,
+            dt: 0.12,
+            flowStrength: 0.9,
+            diffusion: 0.1,
+            isFlowSpecies: true,
+            isSensorySpecies: true,
+            kernelType: 'ring',
+            // Sensory parameters
+            sensory: {
+                foodWeight: 1.5,        // Strong attraction to food
+                pheromoneWeight: 0.3,   // Mild trail following
+                socialWeight: -0.2,     // Slight avoidance of others
+                turnRate: 0.1,          // Slow turning
+                isPredator: false
+            },
+            // Environment settings
+            environment: {
+                foodSpawnRate: 0.003,
+                pheromoneDecayRate: 0.02,
+                pheromoneEmissionRate: 0.05
+            },
+            // Phase 5: Evolution genome
+            genome: {
+                foodWeight: 1.5,
+                pheromoneWeight: 0.3,
+                socialWeight: -0.2,
+                turnRate: 0.1,
+                speedPreference: 0.8,
+                metabolismRate: 0.015,    // Low metabolism (efficient)
+                reproductionThreshold: 45,
+                reproductionCost: 0.55,
+                sizePreference: 1.0,
+                isPredator: false
+            }
+        },
+        // Compact circular blob
+        pattern: (function() {
+            const size = 16;
+            const pattern = [];
+            for (let y = 0; y < size; y++) {
+                const row = [];
+                for (let x = 0; x < size; x++) {
+                    const cx = size / 2 - 0.5;
+                    const cy = size / 2 - 0.5;
+                    const r = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+                    const maxR = size / 2.4;
+                    let value = r < maxR ? 1 - (r / maxR) ** 2 : 0;
+                    row.push(Math.max(0, value));
+                }
+                pattern.push(row);
+            }
+            return pattern;
+        })()
+    },
+
+    /**
+     * Schooler - Strong social attraction, follows pheromones
+     * Forms groups with other schoolers, follows pheromone trails
+     */
+    schooler: {
+        name: "Schooler",
+        description: "Forms schools with others, follows pheromone trails.",
+        params: {
+            R: 11,
+            peaks: 1,
+            mu: 0.22,
+            sigma: 0.03,
+            dt: 0.1,
+            flowStrength: 1.1,
+            diffusion: 0.08,
+            isFlowSpecies: true,
+            isSensorySpecies: true,
+            kernelType: 'ring',
+            // Sensory parameters
+            sensory: {
+                foodWeight: 0.3,        // Weak food attraction
+                pheromoneWeight: 1.2,   // Strong trail following
+                socialWeight: 0.8,      // Strong attraction to others
+                turnRate: 0.2,          // Medium turning
+                isPredator: false
+            },
+            // Environment settings
+            environment: {
+                foodSpawnRate: 0.002,
+                pheromoneDecayRate: 0.008,   // Slower decay for longer trails
+                pheromoneEmissionRate: 0.15  // Stronger emissions
+            },
+            // Phase 5: Evolution genome
+            genome: {
+                foodWeight: 0.3,
+                pheromoneWeight: 1.2,
+                socialWeight: 0.8,
+                turnRate: 0.2,
+                speedPreference: 1.1,
+                metabolismRate: 0.02,
+                reproductionThreshold: 50,
+                reproductionCost: 0.6,
+                sizePreference: 0.9,
+                isPredator: false
+            }
+        },
+        // Streamlined shape for schooling
+        pattern: (function() {
+            const width = 18;
+            const height = 14;
+            const pattern = [];
+            for (let y = 0; y < height; y++) {
+                const row = [];
+                for (let x = 0; x < width; x++) {
+                    const cx = width / 2 - 0.5;
+                    const cy = height / 2 - 0.5;
+                    const dx = (x - cx) / (width / 2.5);
+                    const dy = (y - cy) / (height / 2.5);
+                    const r = Math.sqrt(dx * dx + dy * dy);
+                    let value = r < 1 ? (1 - r * r) : 0;
+                    row.push(Math.max(0, value));
+                }
+                pattern.push(row);
+            }
+            return pattern;
+        })()
+    },
+
+    /**
+     * Hunter - Attracted to other creatures, fast turning
+     * Actively pursues smaller creatures (prey)
+     */
+    hunter: {
+        name: "Hunter",
+        description: "Actively hunts and pursues smaller creatures.",
+        params: {
+            R: 14,
+            peaks: 1,
+            mu: 0.24,
+            sigma: 0.028,
+            dt: 0.12,
+            flowStrength: 1.3,
+            diffusion: 0.06,
+            isFlowSpecies: true,
+            isSensorySpecies: true,
+            kernelType: 'asymmetric',
+            kernelParams: {
+                bias: 0.3
+            },
+            // Sensory parameters
+            sensory: {
+                foodWeight: 0.0,        // Ignores food
+                pheromoneWeight: 0.5,   // Uses pheromones to track
+                socialWeight: 1.5,      // Strong creature attraction
+                turnRate: 0.35,         // Fast turning for pursuit
+                isPredator: true        // Chases smaller creatures
+            },
+            // Environment settings
+            environment: {
+                foodSpawnRate: 0.001,
+                pheromoneDecayRate: 0.015,
+                pheromoneEmissionRate: 0.08
+            },
+            // Phase 5: Evolution genome
+            genome: {
+                foodWeight: 0.0,
+                pheromoneWeight: 0.5,
+                socialWeight: 1.5,
+                turnRate: 0.35,
+                speedPreference: 1.3,
+                metabolismRate: 0.03,    // Higher metabolism (active hunter)
+                reproductionThreshold: 60,
+                reproductionCost: 0.65,
+                sizePreference: 1.3,
+                isPredator: true
+            }
+        },
+        // Larger, more aggressive shape
+        pattern: (function() {
+            const size = 22;
+            const pattern = [];
+            for (let y = 0; y < size; y++) {
+                const row = [];
+                for (let x = 0; x < size; x++) {
+                    const cx = size / 2 - 0.5;
+                    const cy = size / 2 - 0.5;
+                    const dx = x - cx;
+                    const dy = y - cy;
+                    const r = Math.sqrt(dx * dx + dy * dy);
+                    const angle = Math.atan2(dy, dx);
+                    // Slightly pointed forward
+                    const maxR = (size / 2.3) * (1 + 0.15 * Math.cos(angle));
+                    let value = r < maxR ? Math.pow(1 - (r / maxR) ** 2, 1.2) : 0;
+                    row.push(Math.max(0, value));
+                }
+                pattern.push(row);
+            }
+            return pattern;
+        })()
+    },
+
+    /**
+     * Prey - Repelled by large creatures, fast but erratic
+     * Flees from hunters, moves erratically
+     */
+    prey: {
+        name: "Prey",
+        description: "Flees from larger creatures, moves erratically.",
+        params: {
+            R: 9,
+            peaks: 1,
+            mu: 0.18,
+            sigma: 0.035,
+            dt: 0.14,
+            flowStrength: 1.4,    // Fast movement
+            diffusion: 0.12,
+            isFlowSpecies: true,
+            isSensorySpecies: true,
+            kernelType: 'gaussian',
+            // Sensory parameters
+            sensory: {
+                foodWeight: 0.8,        // Attracted to food for survival
+                pheromoneWeight: -0.3,  // Avoids pheromone trails (could be predator)
+                socialWeight: -0.8,     // Strong avoidance of other creatures
+                turnRate: 0.4,          // Very fast turning for evasion
+                isPredator: false
+            },
+            // Environment settings
+            environment: {
+                foodSpawnRate: 0.004,   // More food available
+                pheromoneDecayRate: 0.025,
+                pheromoneEmissionRate: 0.04  // Weak emissions to avoid detection
+            },
+            // Phase 5: Evolution genome
+            genome: {
+                foodWeight: 0.8,
+                pheromoneWeight: -0.3,
+                socialWeight: -0.8,
+                turnRate: 0.4,
+                speedPreference: 1.4,
+                metabolismRate: 0.025,   // Higher metabolism (always moving)
+                reproductionThreshold: 35, // Reproduce quickly
+                reproductionCost: 0.5,
+                sizePreference: 0.7,     // Stay small
+                isPredator: false
+            }
+        },
+        // Small, compact shape for speed
+        pattern: (function() {
+            const size = 12;
+            const pattern = [];
+            for (let y = 0; y < size; y++) {
+                const row = [];
+                for (let x = 0; x < size; x++) {
+                    const cx = size / 2 - 0.5;
+                    const cy = size / 2 - 0.5;
+                    const r = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+                    const maxR = size / 2.5;
+                    let value = r < maxR ? 1 - (r / maxR) ** 2 : 0;
+                    row.push(Math.max(0, value));
+                }
+                pattern.push(row);
+            }
+            return pattern;
+        })()
+    },
+
     /**
      * Place a species pattern onto the grid
      */

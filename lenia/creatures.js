@@ -1,0 +1,941 @@
+/**
+ * Creature Detection and Tracking for Lenia Explorer - Phase 5
+ *
+ * Identifies discrete creatures from the continuous mass field using
+ * connected component labeling. Tracks creatures across frames with
+ * persistent IDs, computing:
+ * - Center of mass position
+ * - Total mass
+ * - Velocity (from position change)
+ * - Heading (direction of movement, smoothed)
+ *
+ * Also provides sensory systems for creatures to detect:
+ * - Food gradients
+ * - Pheromone gradients
+ * - Other creatures (attraction/repulsion)
+ *
+ * Phase 5 additions:
+ * - Genome class for heritable parameters
+ * - Energy system for creatures (gain from food, lose from metabolism)
+ * - Reproduction with mutation when energy threshold reached
+ * - Death when energy depleted
+ */
+
+/**
+ * Genome class - Heritable parameters for creatures
+ * Each creature carries a genome that determines its behavior and physiology
+ */
+class Genome {
+    constructor(defaults = {}) {
+        // Sensory weights (how strongly creature responds to stimuli)
+        this.foodWeight = defaults.foodWeight ?? 1.0;
+        this.pheromoneWeight = defaults.pheromoneWeight ?? 0.5;
+        this.socialWeight = defaults.socialWeight ?? 0.3;
+
+        // Movement parameters
+        this.turnRate = defaults.turnRate ?? 0.15;
+        this.speedPreference = defaults.speedPreference ?? 1.0;
+
+        // Metabolism and reproduction
+        this.metabolismRate = defaults.metabolismRate ?? 0.02;   // Energy lost per frame
+        this.reproductionThreshold = defaults.reproductionThreshold ?? 50;  // Energy needed to reproduce
+        this.reproductionCost = defaults.reproductionCost ?? 0.6; // Fraction of energy given to offspring
+
+        // Physical parameters (within bounds)
+        this.sizePreference = defaults.sizePreference ?? 1.0;    // Preferred relative size
+
+        // Behavioral traits
+        this.isPredator = defaults.isPredator ?? false;
+    }
+
+    /**
+     * Create a mutated copy of this genome
+     * @param {number} mutationRate - How much parameters can change (0-1)
+     * @returns {Genome} - New genome with mutations
+     */
+    mutate(mutationRate = 0.1) {
+        const child = this.clone();
+
+        // Add Gaussian noise to each parameter
+        const mutate = (value, min, max) => {
+            const noise = (Math.random() - 0.5) * 2 * mutationRate * (max - min);
+            return Math.max(min, Math.min(max, value + noise));
+        };
+
+        // Mutate sensory weights
+        child.foodWeight = mutate(child.foodWeight, -1, 2);
+        child.pheromoneWeight = mutate(child.pheromoneWeight, -1, 2);
+        child.socialWeight = mutate(child.socialWeight, -1, 2);
+
+        // Mutate movement
+        child.turnRate = mutate(child.turnRate, 0.01, 0.5);
+        child.speedPreference = mutate(child.speedPreference, 0.5, 2.0);
+
+        // Mutate metabolism (keep reasonable bounds)
+        child.metabolismRate = mutate(child.metabolismRate, 0.005, 0.1);
+        child.reproductionThreshold = mutate(child.reproductionThreshold, 20, 100);
+        child.reproductionCost = mutate(child.reproductionCost, 0.4, 0.8);
+
+        // Mutate physical
+        child.sizePreference = mutate(child.sizePreference, 0.5, 2.0);
+
+        // Small chance to flip predator status
+        if (Math.random() < mutationRate * 0.1) {
+            child.isPredator = !child.isPredator;
+        }
+
+        return child;
+    }
+
+    /**
+     * Create an exact copy of this genome
+     * @returns {Genome}
+     */
+    clone() {
+        return new Genome({
+            foodWeight: this.foodWeight,
+            pheromoneWeight: this.pheromoneWeight,
+            socialWeight: this.socialWeight,
+            turnRate: this.turnRate,
+            speedPreference: this.speedPreference,
+            metabolismRate: this.metabolismRate,
+            reproductionThreshold: this.reproductionThreshold,
+            reproductionCost: this.reproductionCost,
+            sizePreference: this.sizePreference,
+            isPredator: this.isPredator
+        });
+    }
+
+    /**
+     * Create a genome from species preset sensory parameters
+     * @param {Object} sensory - Sensory parameters from species preset
+     * @returns {Genome}
+     */
+    static fromSensoryParams(sensory) {
+        return new Genome({
+            foodWeight: sensory.foodWeight ?? 1.0,
+            pheromoneWeight: sensory.pheromoneWeight ?? 0.5,
+            socialWeight: sensory.socialWeight ?? 0.3,
+            turnRate: sensory.turnRate ?? 0.15,
+            isPredator: sensory.isPredator ?? false
+        });
+    }
+}
+
+class CreatureTracker {
+    constructor(size) {
+        this.size = size;
+
+        // Creature data
+        this.creatures = [];         // Array of Creature objects
+        this.nextId = 1;             // Next creature ID to assign
+        this.labels = new Int32Array(size * size);  // Cell labels
+
+        // Tracking parameters
+        this.params = {
+            massThreshold: 0.1,       // Minimum cell value to be part of creature
+            minCreatureMass: 5.0,     // Minimum mass to be considered a creature
+            maxCreatures: 50,         // Maximum creatures to track
+            matchDistance: 30,        // Max distance to match creatures between frames
+            headingSmoothing: 0.1,    // How quickly heading updates (0-1)
+            velocitySmoothing: 0.3    // How quickly velocity updates (0-1)
+        };
+
+        // Sensory parameters
+        this.sensory = {
+            foodWeight: 1.0,          // Attraction to food (0-2)
+            pheromoneWeight: 0.5,     // Attraction to pheromones (0-2)
+            socialWeight: 0.3,        // Attraction to other creatures (can be negative)
+            socialDistance: 50,       // Distance at which social forces apply
+            turnRate: 0.15,           // How fast creatures can turn (0-1)
+            isPredator: false         // If true, attracted to smaller creatures
+        };
+
+        // Phase 5: Evolution parameters
+        this.evolution = {
+            enabled: false,           // Whether evolution is active
+            mutationRate: 0.1,        // How much genomes mutate (0.01-0.3)
+            baseMetabolism: 0.02,     // Base energy cost per frame
+            sizeMetabolismFactor: 0.001, // Additional cost per unit mass
+            foodEnergyGain: 0.5,      // Energy gained per unit food consumed
+            reproductionThreshold: 50, // Default energy to reproduce
+            maxPopulation: 30,        // Maximum creatures allowed
+            deathBecomesFood: true,   // Dead creature mass becomes food
+            minCreatureEnergy: 10     // Minimum energy for new creatures
+        };
+
+        // Evolution statistics
+        this.stats = {
+            totalBirths: 0,
+            totalDeaths: 0,
+            highestGeneration: 0,
+            averageEnergy: 0,
+            averageGeneration: 0,
+            populationHistory: [],     // Track population over time
+            traitAverages: {}          // Average genome values
+        };
+
+        // Pending reproduction events (processed after detection)
+        this.pendingReproductions = [];
+        this.pendingDeaths = [];
+
+        // Base genome for species (set from species preset)
+        this.baseGenome = null;
+
+        // Working buffers
+        this.visited = new Uint8Array(size * size);
+    }
+
+    /**
+     * Creature data structure
+     */
+    static Creature = class {
+        constructor(id) {
+            this.id = id;
+            this.x = 0;               // Center of mass X
+            this.y = 0;               // Center of mass Y
+            this.mass = 0;            // Total mass
+            this.vx = 0;              // Velocity X
+            this.vy = 0;              // Velocity Y
+            this.heading = 0;         // Current heading angle (radians)
+            this.targetHeading = 0;   // Target heading from sensors
+            this.cells = [];          // Array of {x, y, value} in creature
+            this.age = 0;             // Frames since creation
+            this.lastSeen = 0;        // Frame when last detected
+
+            // Phase 5: Evolution fields
+            this.energy = 25;         // Current energy level (starts at 25)
+            this.genome = null;       // Genome object (set externally)
+            this.generation = 0;      // Generation number (0 = original)
+            this.parentId = null;     // ID of parent creature (null if original)
+            this.birthFrame = 0;      // Frame when creature was born
+        }
+
+        /**
+         * Get creature's speed
+         */
+        get speed() {
+            return Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        }
+
+        /**
+         * Get creature's approximate radius
+         */
+        get radius() {
+            return Math.sqrt(this.mass / Math.PI);
+        }
+
+        /**
+         * Check if creature has enough energy to reproduce
+         */
+        get canReproduce() {
+            if (!this.genome) return false;
+            return this.energy >= this.genome.reproductionThreshold;
+        }
+
+        /**
+         * Check if creature is alive (has energy)
+         */
+        get isAlive() {
+            return this.energy > 0;
+        }
+    };
+
+    /**
+     * Detect and track creatures in the mass field
+     * @param {Float32Array} massField - The Lenia activation grid
+     * @param {number} frameNumber - Current frame for tracking
+     */
+    update(massField, frameNumber = 0) {
+        // Find connected components
+        const newCreatures = this.findCreatures(massField);
+
+        // Match with existing creatures
+        this.matchCreatures(newCreatures, frameNumber);
+
+        // Update creature properties
+        this.updateCreatureProperties(frameNumber);
+    }
+
+    /**
+     * Find connected components (creatures) in the mass field
+     */
+    findCreatures(massField) {
+        const { size, params } = this;
+        const creatures = [];
+
+        this.labels.fill(0);
+        this.visited.fill(0);
+
+        let labelId = 0;
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const idx = y * size + x;
+
+                if (this.visited[idx] || massField[idx] < params.massThreshold) {
+                    continue;
+                }
+
+                // Start flood fill for new component
+                labelId++;
+                const cells = this.floodFill(massField, x, y, labelId);
+
+                // Calculate creature properties
+                let totalMass = 0;
+                let cx = 0, cy = 0;
+
+                for (const cell of cells) {
+                    totalMass += cell.value;
+                    cx += cell.x * cell.value;
+                    cy += cell.y * cell.value;
+                }
+
+                if (totalMass >= params.minCreatureMass) {
+                    const creature = new CreatureTracker.Creature(0); // ID assigned later
+                    creature.x = cx / totalMass;
+                    creature.y = cy / totalMass;
+                    creature.mass = totalMass;
+                    creature.cells = cells;
+                    creatures.push(creature);
+                }
+            }
+        }
+
+        // Sort by mass (largest first) and limit
+        creatures.sort((a, b) => b.mass - a.mass);
+        return creatures.slice(0, params.maxCreatures);
+    }
+
+    /**
+     * Flood fill to find connected component
+     */
+    floodFill(massField, startX, startY, labelId) {
+        const { size, params } = this;
+        const cells = [];
+        const stack = [{ x: startX, y: startY }];
+
+        while (stack.length > 0) {
+            const { x, y } = stack.pop();
+            const idx = y * size + x;
+
+            if (this.visited[idx]) continue;
+            if (massField[idx] < params.massThreshold) continue;
+
+            this.visited[idx] = 1;
+            this.labels[idx] = labelId;
+
+            const value = massField[idx];
+            cells.push({ x, y, value });
+
+            // Check 4 neighbors (toroidal)
+            const neighbors = [
+                { x: (x - 1 + size) % size, y },
+                { x: (x + 1) % size, y },
+                { x, y: (y - 1 + size) % size },
+                { x, y: (y + 1) % size }
+            ];
+
+            for (const n of neighbors) {
+                const nIdx = n.y * size + n.x;
+                if (!this.visited[nIdx] && massField[nIdx] >= params.massThreshold) {
+                    stack.push(n);
+                }
+            }
+        }
+
+        return cells;
+    }
+
+    /**
+     * Match new creatures to existing ones using proximity
+     */
+    matchCreatures(newCreatures, frameNumber) {
+        const { params } = this;
+        const matched = new Set();
+        const newList = [];
+
+        // For each new creature, find best match
+        for (const newCreature of newCreatures) {
+            let bestMatch = null;
+            let bestDist = params.matchDistance;
+
+            for (const existing of this.creatures) {
+                if (matched.has(existing.id)) continue;
+
+                const dist = this.toroidalDistance(
+                    newCreature.x, newCreature.y,
+                    existing.x, existing.y
+                );
+
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestMatch = existing;
+                }
+            }
+
+            if (bestMatch) {
+                // Update existing creature
+                matched.add(bestMatch.id);
+
+                const oldX = bestMatch.x;
+                const oldY = bestMatch.y;
+
+                bestMatch.x = newCreature.x;
+                bestMatch.y = newCreature.y;
+                bestMatch.mass = newCreature.mass;
+                bestMatch.cells = newCreature.cells;
+                bestMatch.lastSeen = frameNumber;
+                bestMatch.age++;
+
+                // Calculate velocity (with toroidal wrapping)
+                const dx = this.toroidalDelta(newCreature.x, oldX, this.size);
+                const dy = this.toroidalDelta(newCreature.y, oldY, this.size);
+
+                bestMatch.vx = bestMatch.vx * (1 - params.velocitySmoothing) +
+                               dx * params.velocitySmoothing;
+                bestMatch.vy = bestMatch.vy * (1 - params.velocitySmoothing) +
+                               dy * params.velocitySmoothing;
+
+                // Update heading from velocity
+                if (bestMatch.speed > 0.1) {
+                    bestMatch.heading = Math.atan2(bestMatch.vy, bestMatch.vx);
+                }
+
+                newList.push(bestMatch);
+            } else {
+                // Create new creature
+                newCreature.id = this.nextId++;
+                newCreature.lastSeen = frameNumber;
+                newCreature.heading = Math.random() * Math.PI * 2;
+                newList.push(newCreature);
+            }
+        }
+
+        this.creatures = newList;
+    }
+
+    /**
+     * Update creature properties after matching
+     */
+    updateCreatureProperties(frameNumber) {
+        const { headingSmoothing } = this.params;
+
+        for (const creature of this.creatures) {
+            // Smooth heading toward target
+            if (creature.targetHeading !== undefined) {
+                let headingDiff = creature.targetHeading - creature.heading;
+
+                // Normalize to [-PI, PI]
+                while (headingDiff > Math.PI) headingDiff -= 2 * Math.PI;
+                while (headingDiff < -Math.PI) headingDiff += 2 * Math.PI;
+
+                creature.heading += headingDiff * headingSmoothing;
+
+                // Normalize heading
+                while (creature.heading > Math.PI) creature.heading -= 2 * Math.PI;
+                while (creature.heading < -Math.PI) creature.heading += 2 * Math.PI;
+            }
+        }
+
+        // Remove stale creatures (not seen for 10 frames)
+        this.creatures = this.creatures.filter(c => frameNumber - c.lastSeen < 10);
+    }
+
+    /**
+     * Compute toroidal distance
+     */
+    toroidalDistance(x1, y1, x2, y2) {
+        const dx = Math.min(Math.abs(x2 - x1), this.size - Math.abs(x2 - x1));
+        const dy = Math.min(Math.abs(y2 - y1), this.size - Math.abs(y2 - y1));
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    /**
+     * Compute toroidal delta (shortest path direction)
+     */
+    toroidalDelta(to, from, size) {
+        let delta = to - from;
+        if (delta > size / 2) delta -= size;
+        if (delta < -size / 2) delta += size;
+        return delta;
+    }
+
+    /**
+     * Compute sensory input for a creature
+     * @param {Creature} creature - The sensing creature
+     * @param {Environment} environment - Environment with food/pheromone fields
+     * @returns {Object} - Sensory direction {x, y}
+     */
+    computeSensoryInput(creature, environment) {
+        // Use per-creature sensory parameters if evolution is enabled
+        const sensory = this.getCreatureSensory(creature);
+        let senseX = 0;
+        let senseY = 0;
+
+        // Food gradient sensing
+        if (sensory.foodWeight !== 0 && environment) {
+            const foodGrad = environment.getFoodGradient(creature.x, creature.y);
+            senseX += foodGrad.x * sensory.foodWeight;
+            senseY += foodGrad.y * sensory.foodWeight;
+        }
+
+        // Pheromone gradient sensing
+        if (sensory.pheromoneWeight !== 0 && environment) {
+            const pheromoneGrad = environment.getPheromoneGradient(creature.x, creature.y);
+            senseX += pheromoneGrad.x * sensory.pheromoneWeight;
+            senseY += pheromoneGrad.y * sensory.pheromoneWeight;
+        }
+
+        // Social sensing (other creatures)
+        if (sensory.socialWeight !== 0) {
+            const social = this.computeSocialForceForCreature(creature, sensory);
+            senseX += social.x * sensory.socialWeight;
+            senseY += social.y * sensory.socialWeight;
+        }
+
+        // Add current (environmental flow)
+        if (environment && environment.current) {
+            senseX += environment.current.x;
+            senseY += environment.current.y;
+        }
+
+        return { x: senseX, y: senseY };
+    }
+
+    /**
+     * Compute social force from other creatures (uses global sensory)
+     */
+    computeSocialForce(creature) {
+        return this.computeSocialForceForCreature(creature, this.sensory);
+    }
+
+    /**
+     * Compute social force from other creatures with specific sensory params
+     * @param {Creature} creature - The creature computing forces
+     * @param {Object} sensory - Sensory parameters to use
+     */
+    computeSocialForceForCreature(creature, sensory) {
+        const { size } = this;
+        let forceX = 0;
+        let forceY = 0;
+
+        for (const other of this.creatures) {
+            if (other.id === creature.id) continue;
+
+            const dist = this.toroidalDistance(
+                creature.x, creature.y,
+                other.x, other.y
+            );
+
+            if (dist < sensory.socialDistance && dist > 0) {
+                // Direction toward other creature
+                const dx = this.toroidalDelta(other.x, creature.x, size);
+                const dy = this.toroidalDelta(other.y, creature.y, size);
+                const len = Math.sqrt(dx * dx + dy * dy);
+
+                if (len > 0) {
+                    const nx = dx / len;
+                    const ny = dy / len;
+
+                    // Force magnitude decreases with distance
+                    const strength = 1 - dist / sensory.socialDistance;
+
+                    // Predator/prey: attracted to smaller, repelled by larger
+                    if (sensory.isPredator) {
+                        if (other.mass < creature.mass * 0.8) {
+                            // Attracted to smaller (prey)
+                            forceX += nx * strength * other.mass / creature.mass;
+                            forceY += ny * strength * other.mass / creature.mass;
+                        } else {
+                            // Repelled by similar or larger
+                            forceX -= nx * strength * 0.5;
+                            forceY -= ny * strength * 0.5;
+                        }
+                    } else {
+                        // Normal: attracted to similar size (schooling)
+                        const sizeSimilarity = Math.min(creature.mass, other.mass) /
+                                             Math.max(creature.mass, other.mass);
+                        forceX += nx * strength * sizeSimilarity;
+                        forceY += ny * strength * sizeSimilarity;
+                    }
+                }
+            }
+        }
+
+        return { x: forceX, y: forceY };
+    }
+
+    /**
+     * Update target headings for all creatures based on sensors
+     */
+    updateCreatureHeadings(environment) {
+        for (const creature of this.creatures) {
+            const sense = this.computeSensoryInput(creature, environment);
+            const senseMag = Math.sqrt(sense.x * sense.x + sense.y * sense.y);
+
+            if (senseMag > 0.001) {
+                // Compute target heading from sensory input
+                creature.targetHeading = Math.atan2(sense.y, sense.x);
+            } else {
+                // Keep current heading if no sensory input
+                creature.targetHeading = creature.heading;
+            }
+        }
+    }
+
+    /**
+     * Get steering force to inject into flow field at a position
+     */
+    getSteeringForce(x, y) {
+        const idx = Math.floor(y) * this.size + Math.floor(x);
+        const label = this.labels[idx];
+
+        if (label === 0) return { x: 0, y: 0 };
+
+        // Find the creature this cell belongs to
+        for (const creature of this.creatures) {
+            // Check if this creature contains this position
+            for (const cell of creature.cells) {
+                if (Math.floor(cell.x) === Math.floor(x) &&
+                    Math.floor(cell.y) === Math.floor(y)) {
+                    // Return steering force based on heading
+                    const steer = this.sensory.turnRate;
+                    return {
+                        x: Math.cos(creature.heading) * steer * cell.value,
+                        y: Math.sin(creature.heading) * steer * cell.value
+                    };
+                }
+            }
+        }
+
+        return { x: 0, y: 0 };
+    }
+
+    /**
+     * Get creature at position (if any)
+     */
+    getCreatureAt(x, y) {
+        for (const creature of this.creatures) {
+            const dist = this.toroidalDistance(x, y, creature.x, creature.y);
+            if (dist < creature.radius * 2) {
+                return creature;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Get all creatures
+     */
+    getCreatures() {
+        return this.creatures;
+    }
+
+    /**
+     * Get creature by ID
+     */
+    getCreatureById(id) {
+        return this.creatures.find(c => c.id === id);
+    }
+
+    /**
+     * Get largest creature
+     */
+    getLargestCreature() {
+        if (this.creatures.length === 0) return null;
+        return this.creatures.reduce((a, b) => a.mass > b.mass ? a : b);
+    }
+
+    /**
+     * Get number of creatures
+     */
+    get count() {
+        return this.creatures.length;
+    }
+
+    // ==================== Phase 5: Evolution Methods ====================
+
+    /**
+     * Update energy for all creatures based on food consumption and metabolism
+     * @param {Environment} environment - Environment with food field
+     */
+    updateEnergy(environment) {
+        if (!this.evolution.enabled) return;
+
+        const { baseMetabolism, sizeMetabolismFactor, foodEnergyGain } = this.evolution;
+
+        for (const creature of this.creatures) {
+            if (!creature.genome) {
+                // Assign default genome if missing
+                creature.genome = new Genome();
+            }
+
+            // Metabolism cost: base + size-dependent cost
+            const metabolismCost = creature.genome.metabolismRate +
+                                   creature.mass * sizeMetabolismFactor;
+            creature.energy -= metabolismCost;
+
+            // Energy gain from food (if environment available)
+            if (environment) {
+                let foodConsumed = 0;
+                for (const cell of creature.cells) {
+                    const idx = Math.floor(cell.y) * this.size + Math.floor(cell.x);
+                    if (idx >= 0 && idx < environment.food.length) {
+                        const foodHere = environment.food[idx];
+                        const consumed = Math.min(foodHere, cell.value * 0.1);
+                        foodConsumed += consumed;
+                        environment.food[idx] = Math.max(0, foodHere - consumed);
+                    }
+                }
+                creature.energy += foodConsumed * foodEnergyGain;
+            }
+
+            // Clamp energy
+            creature.energy = Math.max(0, creature.energy);
+        }
+    }
+
+    /**
+     * Check for reproduction and death conditions
+     * Returns lists of creatures to reproduce and remove
+     */
+    checkEvolutionEvents() {
+        if (!this.evolution.enabled) return { reproduce: [], die: [] };
+
+        const reproduce = [];
+        const die = [];
+
+        for (const creature of this.creatures) {
+            // Check for death
+            if (creature.energy <= 0) {
+                die.push(creature);
+                continue;
+            }
+
+            // Check for reproduction
+            if (creature.canReproduce && this.creatures.length < this.evolution.maxPopulation) {
+                reproduce.push(creature);
+            }
+        }
+
+        return { reproduce, die };
+    }
+
+    /**
+     * Process a reproduction event - creates offspring data
+     * The actual mass splitting is handled by flow-lenia.js
+     * @param {Creature} parent - Parent creature
+     * @param {number} frameNumber - Current frame
+     * @returns {Object} - Offspring data for flow field manipulation
+     */
+    processReproduction(parent, frameNumber) {
+        if (!parent.genome) return null;
+
+        // Energy cost
+        const energyPerChild = parent.energy * parent.genome.reproductionCost / 2;
+        parent.energy *= (1 - parent.genome.reproductionCost);
+
+        // Create two offspring genomes with mutations
+        const genome1 = parent.genome.mutate(this.evolution.mutationRate);
+        const genome2 = parent.genome.mutate(this.evolution.mutationRate);
+
+        // Track statistics
+        this.stats.totalBirths += 2;
+        const newGen = parent.generation + 1;
+        if (newGen > this.stats.highestGeneration) {
+            this.stats.highestGeneration = newGen;
+        }
+
+        return {
+            parentId: parent.id,
+            parentX: parent.x,
+            parentY: parent.y,
+            parentMass: parent.mass,
+            offspring: [
+                {
+                    genome: genome1,
+                    energy: energyPerChild,
+                    generation: newGen,
+                    heading: parent.heading + Math.PI / 4  // Slight angle offset
+                },
+                {
+                    genome: genome2,
+                    energy: energyPerChild,
+                    generation: newGen,
+                    heading: parent.heading - Math.PI / 4
+                }
+            ]
+        };
+    }
+
+    /**
+     * Process a death event
+     * @param {Creature} creature - Dying creature
+     * @param {Environment} environment - Environment to add food to
+     */
+    processDeath(creature, environment) {
+        this.stats.totalDeaths++;
+
+        // Optionally convert dead mass to food
+        if (this.evolution.deathBecomesFood && environment) {
+            const foodAmount = creature.mass * 0.3;  // 30% of mass becomes food
+            environment.addFood(creature.x, creature.y, foodAmount, creature.radius);
+        }
+    }
+
+    /**
+     * Assign genome to a newly detected creature that doesn't have one
+     * @param {Creature} creature - Creature needing a genome
+     */
+    assignDefaultGenome(creature) {
+        if (creature.genome) return;
+
+        // Use base genome if set (from species preset), otherwise create from sensory settings
+        if (this.baseGenome) {
+            creature.genome = this.baseGenome.clone();
+        } else {
+            // Create genome from current global sensory settings
+            creature.genome = new Genome({
+                foodWeight: this.sensory.foodWeight,
+                pheromoneWeight: this.sensory.pheromoneWeight,
+                socialWeight: this.sensory.socialWeight,
+                turnRate: this.sensory.turnRate,
+                isPredator: this.sensory.isPredator
+            });
+        }
+
+        creature.energy = this.evolution.minCreatureEnergy +
+                          creature.mass * 0.5;  // Some energy based on size
+    }
+
+    /**
+     * Register a new creature from reproduction
+     * @param {Object} offspringData - Data from processReproduction
+     * @param {number} offspringIndex - Which offspring (0 or 1)
+     * @param {number} x - Position X
+     * @param {number} y - Position Y
+     * @param {number} mass - Initial mass
+     * @param {number} frameNumber - Birth frame
+     */
+    registerOffspring(offspringData, offspringIndex, x, y, mass, frameNumber) {
+        const data = offspringData.offspring[offspringIndex];
+
+        const creature = new CreatureTracker.Creature(this.nextId++);
+        creature.x = x;
+        creature.y = y;
+        creature.mass = mass;
+        creature.genome = data.genome;
+        creature.energy = data.energy;
+        creature.generation = data.generation;
+        creature.parentId = offspringData.parentId;
+        creature.birthFrame = frameNumber;
+        creature.heading = data.heading;
+        creature.lastSeen = frameNumber;
+
+        this.creatures.push(creature);
+        return creature;
+    }
+
+    /**
+     * Update evolution statistics
+     */
+    updateStats() {
+        if (this.creatures.length === 0) {
+            this.stats.averageEnergy = 0;
+            this.stats.averageGeneration = 0;
+            this.stats.traitAverages = {};
+            return;
+        }
+
+        let totalEnergy = 0;
+        let totalGen = 0;
+        const traits = {
+            foodWeight: 0,
+            pheromoneWeight: 0,
+            socialWeight: 0,
+            turnRate: 0,
+            metabolismRate: 0
+        };
+
+        for (const creature of this.creatures) {
+            totalEnergy += creature.energy;
+            totalGen += creature.generation;
+
+            if (creature.genome) {
+                traits.foodWeight += creature.genome.foodWeight;
+                traits.pheromoneWeight += creature.genome.pheromoneWeight;
+                traits.socialWeight += creature.genome.socialWeight;
+                traits.turnRate += creature.genome.turnRate;
+                traits.metabolismRate += creature.genome.metabolismRate;
+            }
+        }
+
+        const n = this.creatures.length;
+        this.stats.averageEnergy = totalEnergy / n;
+        this.stats.averageGeneration = totalGen / n;
+
+        for (const key in traits) {
+            this.stats.traitAverages[key] = traits[key] / n;
+        }
+
+        // Track population history (keep last 500 frames)
+        this.stats.populationHistory.push(n);
+        if (this.stats.populationHistory.length > 500) {
+            this.stats.populationHistory.shift();
+        }
+    }
+
+    /**
+     * Get sensory parameters for a specific creature (from genome or global)
+     * @param {Creature} creature
+     * @returns {Object} - Sensory parameters to use
+     */
+    getCreatureSensory(creature) {
+        if (this.evolution.enabled && creature.genome) {
+            return {
+                foodWeight: creature.genome.foodWeight,
+                pheromoneWeight: creature.genome.pheromoneWeight,
+                socialWeight: creature.genome.socialWeight,
+                turnRate: creature.genome.turnRate,
+                isPredator: creature.genome.isPredator,
+                socialDistance: this.sensory.socialDistance  // Keep global
+            };
+        }
+        return this.sensory;
+    }
+
+    /**
+     * Reset evolution statistics
+     */
+    resetStats() {
+        this.stats = {
+            totalBirths: 0,
+            totalDeaths: 0,
+            highestGeneration: 0,
+            averageEnergy: 0,
+            averageGeneration: 0,
+            populationHistory: [],
+            traitAverages: {}
+        };
+    }
+
+    /**
+     * Clear all creatures
+     */
+    clear() {
+        this.creatures = [];
+        this.labels.fill(0);
+        this.resetStats();
+    }
+
+    /**
+     * Resize the tracker
+     */
+    resize(newSize) {
+        this.size = newSize;
+        this.labels = new Int32Array(newSize * newSize);
+        this.visited = new Uint8Array(newSize * newSize);
+        this.creatures = [];
+    }
+}

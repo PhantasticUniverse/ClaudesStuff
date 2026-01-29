@@ -398,6 +398,10 @@ function draw() {
             if (generation % 10 === 0 && typeof updateMassStats === 'function') {
                 updateMassStats();
             }
+            // Update sensory stats periodically
+            if (generation % 10 === 0 && typeof updateSensoryStats === 'function') {
+                updateSensoryStats();
+            }
         } else {
             lenia.step();
         }
@@ -442,8 +446,36 @@ function draw() {
 
         for (let y = 0; y < sim.size; y++) {
             for (let x = 0; x < sim.size; x++) {
-                const value = sim.grid[y * sim.size + x];
-                const color = sim.getColor(value);
+                const cellIdx = y * sim.size + x;
+                const value = sim.grid[cellIdx];
+                let color = sim.getColor(value);
+
+                // Phase 4: Apply environment overlays if sensory mode is active
+                if (typeof sensoryEnabled !== 'undefined' && sensoryEnabled && typeof environment !== 'undefined' && environment) {
+                    let r = color[0], g = color[1], b = color[2];
+
+                    // Food overlay (green tint)
+                    if (typeof showFoodOverlay !== 'undefined' && showFoodOverlay) {
+                        const foodVal = environment.food[cellIdx];
+                        if (foodVal > 0.05) {
+                            const foodIntensity = Math.min(1, foodVal) * 0.5;
+                            g = Math.min(255, g + foodIntensity * 150);
+                            b = Math.min(255, b + foodIntensity * 30);
+                        }
+                    }
+
+                    // Pheromone overlay (magenta tint)
+                    if (typeof showPheromoneOverlay !== 'undefined' && showPheromoneOverlay) {
+                        const pheromoneVal = environment.pheromone[cellIdx];
+                        if (pheromoneVal > 0.02) {
+                            const pherIntensity = Math.min(1, pheromoneVal * 2) * 0.6;
+                            r = Math.min(255, r + pherIntensity * 180);
+                            b = Math.min(255, b + pherIntensity * 140);
+                        }
+                    }
+
+                    color = [Math.round(r), Math.round(g), Math.round(b)];
+                }
 
                 const px = Math.floor(x * cellSize);
                 const py = Math.floor(y * cellSize);
@@ -466,8 +498,60 @@ function draw() {
     }
     updatePixels();
 
+    // Phase 4: Draw creature headings overlay
+    if (typeof sensoryEnabled !== 'undefined' && sensoryEnabled &&
+        typeof showHeadingsOverlay !== 'undefined' && showHeadingsOverlay &&
+        typeof creatureTracker !== 'undefined' && creatureTracker) {
+        drawCreatureHeadings();
+    }
+
     // Update stats
     updateStats();
+}
+
+/**
+ * Phase 4: Draw heading vectors for each detected creature
+ */
+function drawCreatureHeadings() {
+    if (!creatureTracker || creatureTracker.count === 0) return;
+
+    const sim = flowLenia || lenia;
+    const cellSize = width / sim.size;
+
+    push();
+    stroke(255, 255, 0);
+    strokeWeight(2);
+
+    for (const creature of creatureTracker.getCreatures()) {
+        const screenX = creature.x * cellSize;
+        const screenY = creature.y * cellSize;
+        const arrowLen = Math.min(30, creature.radius * cellSize * 2);
+
+        // Draw heading arrow
+        const endX = screenX + Math.cos(creature.heading) * arrowLen;
+        const endY = screenY + Math.sin(creature.heading) * arrowLen;
+
+        line(screenX, screenY, endX, endY);
+
+        // Arrowhead
+        const arrowSize = 6;
+        const angle = creature.heading;
+        const ax1 = endX - arrowSize * Math.cos(angle - 0.4);
+        const ay1 = endY - arrowSize * Math.sin(angle - 0.4);
+        const ax2 = endX - arrowSize * Math.cos(angle + 0.4);
+        const ay2 = endY - arrowSize * Math.sin(angle + 0.4);
+        line(endX, endY, ax1, ay1);
+        line(endX, endY, ax2, ay2);
+
+        // Creature ID label
+        noStroke();
+        fill(255, 255, 0);
+        textSize(10);
+        textAlign(CENTER, CENTER);
+        text(creature.id, screenX, screenY - arrowLen - 5);
+    }
+
+    pop();
 }
 
 function updateStats() {

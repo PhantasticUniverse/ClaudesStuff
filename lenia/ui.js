@@ -19,10 +19,30 @@ let flowLenia = null;
 let useFlowLenia = false;
 let initialMass = 0;
 
+// Phase 4: Environment and creature tracking
+let environment = null;
+let creatureTracker = null;
+let sensoryEnabled = false;
+
+// Phase 5: Evolution
+let evolutionEnabled = false;
+
+// Visualization overlay settings
+let showFoodOverlay = true;
+let showPheromoneOverlay = false;
+let showHeadingsOverlay = false;
+
 function initUI() {
     // Initialize multi-channel, flow-lenia, and explorer systems
     multiChannel = new MultiChannelLenia(256, 2);
     flowLenia = new FlowLenia(256);
+
+    // Phase 4: Initialize environment and creature tracking
+    environment = new Environment(256);
+    creatureTracker = new CreatureTracker(256);
+    flowLenia.setEnvironment(environment);
+    flowLenia.setCreatureTracker(creatureTracker);
+
     initExplorer();
 
     // Mode tab switching
@@ -55,6 +75,164 @@ function initUI() {
         }
     });
 
+    // Phase 4: Sensory mode toggle
+    document.getElementById('btn-sensory-off').addEventListener('click', () => {
+        setSensoryMode(false);
+    });
+
+    document.getElementById('btn-sensory-on').addEventListener('click', () => {
+        setSensoryMode(true);
+    });
+
+    // Phase 4: Environment controls
+    setupSlider('food-spawn', (value) => {
+        if (environment) {
+            environment.params.foodSpawnRate = parseFloat(value);
+        }
+    });
+
+    setupSlider('pheromone-decay', (value) => {
+        if (environment) {
+            environment.params.pheromoneDecayRate = parseFloat(value);
+        }
+    });
+
+    setupSlider('current-strength', (value) => {
+        if (environment) {
+            environment.params.currentStrength = parseFloat(value);
+        }
+    });
+
+    setupSlider('current-angle', (value) => {
+        if (environment) {
+            environment.params.currentAngle = parseFloat(value) * Math.PI / 180;
+        }
+    });
+
+    document.getElementById('btn-add-food').addEventListener('click', () => {
+        if (environment) {
+            // Add food at random locations
+            for (let i = 0; i < 5; i++) {
+                environment.addFood(
+                    Math.random() * environment.size,
+                    Math.random() * environment.size,
+                    0.8,
+                    15
+                );
+            }
+        }
+    });
+
+    document.getElementById('btn-reset-env').addEventListener('click', () => {
+        if (environment) {
+            environment.reset();
+        }
+    });
+
+    // Phase 4: Creature behavior controls
+    setupSlider('food-weight', (value) => {
+        if (creatureTracker) {
+            creatureTracker.sensory.foodWeight = parseFloat(value);
+        }
+    });
+
+    setupSlider('pheromone-weight', (value) => {
+        if (creatureTracker) {
+            creatureTracker.sensory.pheromoneWeight = parseFloat(value);
+        }
+    });
+
+    setupSlider('social-weight', (value) => {
+        if (creatureTracker) {
+            creatureTracker.sensory.socialWeight = parseFloat(value);
+        }
+    });
+
+    setupSlider('turn-rate', (value) => {
+        if (creatureTracker) {
+            creatureTracker.sensory.turnRate = parseFloat(value);
+        }
+    });
+
+    setupSlider('steering-strength', (value) => {
+        if (flowLenia) {
+            flowLenia.steeringStrength = parseFloat(value);
+        }
+    });
+
+    document.getElementById('btn-predator-mode').addEventListener('click', () => {
+        if (creatureTracker) {
+            creatureTracker.sensory.isPredator = !creatureTracker.sensory.isPredator;
+            const btn = document.getElementById('btn-predator-mode');
+            if (creatureTracker.sensory.isPredator) {
+                btn.classList.add('primary');
+                btn.textContent = 'Predator: ON';
+            } else {
+                btn.classList.remove('primary');
+                btn.textContent = 'Predator Mode';
+            }
+        }
+    });
+
+    // Phase 4: Visualization overlay toggles
+    document.getElementById('btn-show-food').addEventListener('click', () => {
+        showFoodOverlay = !showFoodOverlay;
+        const btn = document.getElementById('btn-show-food');
+        btn.classList.toggle('primary', showFoodOverlay);
+    });
+
+    document.getElementById('btn-show-pheromone').addEventListener('click', () => {
+        showPheromoneOverlay = !showPheromoneOverlay;
+        const btn = document.getElementById('btn-show-pheromone');
+        btn.classList.toggle('primary', showPheromoneOverlay);
+    });
+
+    document.getElementById('btn-show-headings').addEventListener('click', () => {
+        showHeadingsOverlay = !showHeadingsOverlay;
+        const btn = document.getElementById('btn-show-headings');
+        btn.classList.toggle('primary', showHeadingsOverlay);
+    });
+
+    // Phase 5: Evolution mode toggle
+    document.getElementById('btn-evolution-off').addEventListener('click', () => {
+        setEvolutionMode(false);
+    });
+
+    document.getElementById('btn-evolution-on').addEventListener('click', () => {
+        setEvolutionMode(true);
+    });
+
+    // Phase 5: Evolution controls
+    setupSlider('mutation-rate', (value) => {
+        if (creatureTracker) {
+            creatureTracker.evolution.mutationRate = parseFloat(value);
+        }
+    });
+
+    setupSlider('metabolism-rate', (value) => {
+        if (creatureTracker) {
+            creatureTracker.evolution.baseMetabolism = parseFloat(value);
+        }
+    });
+
+    setupSlider('reproduction-threshold', (value) => {
+        if (creatureTracker) {
+            creatureTracker.evolution.reproductionThreshold = parseFloat(value);
+        }
+    });
+
+    setupSlider('max-population', (value) => {
+        if (creatureTracker) {
+            creatureTracker.evolution.maxPopulation = parseInt(value);
+        }
+    });
+
+    setupSlider('food-energy', (value) => {
+        if (creatureTracker) {
+            creatureTracker.evolution.foodEnergyGain = parseFloat(value);
+        }
+    });
+
     // Species select
     const speciesSelect = document.getElementById('species-select');
     speciesSelect.addEventListener('change', (e) => {
@@ -67,6 +245,29 @@ function initUI() {
                 setFlowMode(true);
                 flowLenia.loadSpecies(speciesKey);
                 initialMass = flowLenia.totalMass();
+
+                // Check if this is a sensory species
+                if (species.params.isSensorySpecies) {
+                    setSensoryMode(true);
+
+                    // Apply sensory parameters if available
+                    if (species.params.sensory && creatureTracker) {
+                        Object.assign(creatureTracker.sensory, species.params.sensory);
+                        syncSensoryUI();
+                    }
+
+                    // Apply environment parameters if available
+                    if (species.params.environment && environment) {
+                        Object.assign(environment.params, species.params.environment);
+                        syncEnvironmentUI();
+                    }
+
+                    // Phase 5: Apply genome parameters if available
+                    if (species.params.genome && creatureTracker) {
+                        // Store base genome for new creatures
+                        creatureTracker.baseGenome = new Genome(species.params.genome);
+                    }
+                }
             } else {
                 // For standard species, can use either mode
                 if (useFlowLenia) {
@@ -527,12 +728,14 @@ function setFlowMode(enabled) {
     const btnFlow = document.getElementById('btn-flow-lenia');
     const flowIndicator = document.getElementById('flow-indicator');
     const flowParamsSection = document.getElementById('flow-params-section');
+    const sensorySection = document.getElementById('sensory-section');
 
     if (enabled) {
         btnStandard.classList.remove('primary');
         btnFlow.classList.add('primary');
         flowIndicator.style.display = 'block';
         flowParamsSection.style.display = 'block';
+        sensorySection.style.display = 'block';  // Show sensory controls when flow mode active
 
         // Copy current state from standard lenia to flow lenia if needed
         if (flowLenia.totalMass() === 0 && lenia.totalMass() > 0) {
@@ -559,6 +762,10 @@ function setFlowMode(enabled) {
         btnFlow.classList.remove('primary');
         flowIndicator.style.display = 'none';
         flowParamsSection.style.display = 'none';
+        sensorySection.style.display = 'none';  // Hide sensory controls
+
+        // Also disable sensory mode when leaving flow mode
+        setSensoryMode(false);
 
         // Copy current state from flow lenia to standard lenia if needed
         if (lenia.totalMass() === 0 && flowLenia.totalMass() > 0) {
@@ -579,6 +786,101 @@ function setFlowMode(enabled) {
 
     generation = 0;
     syncUIToParams();
+}
+
+/**
+ * Phase 5: Toggle evolution mode
+ */
+function setEvolutionMode(enabled) {
+    evolutionEnabled = enabled;
+
+    // Update button states
+    const btnOff = document.getElementById('btn-evolution-off');
+    const btnOn = document.getElementById('btn-evolution-on');
+    const evolutionIndicator = document.getElementById('evolution-indicator');
+    const evolutionStatsSection = document.getElementById('evolution-stats-section');
+
+    if (enabled) {
+        btnOff.classList.remove('primary');
+        btnOn.classList.add('primary');
+        evolutionIndicator.style.display = 'block';
+        evolutionStatsSection.style.display = 'block';
+
+        // Enable evolution in creature tracker
+        if (creatureTracker) {
+            creatureTracker.evolution.enabled = true;
+            creatureTracker.resetStats();
+
+            // Assign genomes to existing creatures
+            for (const creature of creatureTracker.creatures) {
+                if (!creature.genome) {
+                    creatureTracker.assignDefaultGenome(creature);
+                }
+            }
+        }
+    } else {
+        btnOff.classList.add('primary');
+        btnOn.classList.remove('primary');
+        evolutionIndicator.style.display = 'none';
+        evolutionStatsSection.style.display = 'none';
+
+        // Disable evolution in creature tracker
+        if (creatureTracker) {
+            creatureTracker.evolution.enabled = false;
+        }
+    }
+}
+
+/**
+ * Phase 4: Toggle sensory creature mode
+ */
+function setSensoryMode(enabled) {
+    sensoryEnabled = enabled;
+
+    // Update button states
+    const btnOff = document.getElementById('btn-sensory-off');
+    const btnOn = document.getElementById('btn-sensory-on');
+    const sensoryIndicator = document.getElementById('sensory-indicator');
+    const environmentSection = document.getElementById('environment-section');
+    const behaviorSection = document.getElementById('creature-behavior-section');
+    const visualizationSection = document.getElementById('visualization-section');
+    const evolutionSection = document.getElementById('evolution-section');
+
+    if (enabled) {
+        btnOff.classList.remove('primary');
+        btnOn.classList.add('primary');
+        sensoryIndicator.style.display = 'block';
+        environmentSection.style.display = 'block';
+        behaviorSection.style.display = 'block';
+        visualizationSection.style.display = 'block';
+        evolutionSection.style.display = 'block';  // Show evolution controls
+
+        // Enable sensory mode in flow lenia
+        if (flowLenia) {
+            flowLenia.setSensoryMode(true);
+        }
+
+        // Initialize environment if needed
+        if (environment && environment.food[0] === 0) {
+            environment.initializeFood();
+        }
+    } else {
+        btnOff.classList.add('primary');
+        btnOn.classList.remove('primary');
+        sensoryIndicator.style.display = 'none';
+        environmentSection.style.display = 'none';
+        behaviorSection.style.display = 'none';
+        visualizationSection.style.display = 'none';
+        evolutionSection.style.display = 'none';  // Hide evolution controls
+
+        // Disable evolution when disabling sensory mode
+        setEvolutionMode(false);
+
+        // Disable sensory mode in flow lenia
+        if (flowLenia) {
+            flowLenia.setSensoryMode(false);
+        }
+    }
 }
 
 /**
@@ -757,11 +1059,125 @@ function syncUIToParams() {
     if (useFlowLenia) {
         setSliderValue('flow-strength', flowLenia.flowStrength);
         setSliderValue('flow-diffusion', flowLenia.diffusion);
+        setSliderValue('steering-strength', flowLenia.steeringStrength);
+    }
+
+    // Sync sensory params if enabled
+    if (sensoryEnabled) {
+        syncSensoryUI();
+        syncEnvironmentUI();
     }
 
     // Update visibility and preview
     updateKernelParamsVisibility();
     updateKernelPreview();
+}
+
+/**
+ * Sync sensory UI controls to current creature tracker settings
+ */
+function syncSensoryUI() {
+    if (!creatureTracker) return;
+
+    setSliderValue('food-weight', creatureTracker.sensory.foodWeight);
+    setSliderValue('pheromone-weight', creatureTracker.sensory.pheromoneWeight);
+    setSliderValue('social-weight', creatureTracker.sensory.socialWeight);
+    setSliderValue('turn-rate', creatureTracker.sensory.turnRate);
+
+    // Update predator button state
+    const btn = document.getElementById('btn-predator-mode');
+    if (btn) {
+        if (creatureTracker.sensory.isPredator) {
+            btn.classList.add('primary');
+            btn.textContent = 'Predator: ON';
+        } else {
+            btn.classList.remove('primary');
+            btn.textContent = 'Predator Mode';
+        }
+    }
+}
+
+/**
+ * Sync environment UI controls to current environment settings
+ */
+function syncEnvironmentUI() {
+    if (!environment) return;
+
+    setSliderValue('food-spawn', environment.params.foodSpawnRate);
+    setSliderValue('pheromone-decay', environment.params.pheromoneDecayRate);
+    setSliderValue('current-strength', environment.params.currentStrength);
+    setSliderValue('current-angle', environment.params.currentAngle * 180 / Math.PI);
+}
+
+/**
+ * Update sensory stats display
+ */
+function updateSensoryStats() {
+    if (!sensoryEnabled) return;
+
+    const creaturesEl = document.getElementById('stat-creatures');
+    const foodEl = document.getElementById('stat-food');
+
+    if (creaturesEl && creatureTracker) {
+        creaturesEl.textContent = creatureTracker.count;
+    }
+
+    if (foodEl && environment) {
+        let totalFood = 0;
+        for (let i = 0; i < environment.food.length; i++) {
+            totalFood += environment.food[i];
+        }
+        foodEl.textContent = totalFood.toFixed(1);
+    }
+
+    // Update evolution stats if enabled
+    if (evolutionEnabled && creatureTracker) {
+        updateEvolutionStats();
+    }
+}
+
+/**
+ * Update evolution statistics display
+ */
+function updateEvolutionStats() {
+    if (!creatureTracker) return;
+
+    const stats = creatureTracker.stats;
+
+    // Population and generation stats
+    const populationEl = document.getElementById('stat-population');
+    const highestGenEl = document.getElementById('stat-highest-gen');
+    const avgGenEl = document.getElementById('stat-avg-gen');
+    const avgEnergyEl = document.getElementById('stat-avg-energy');
+    const birthsEl = document.getElementById('stat-births');
+    const deathsEl = document.getElementById('stat-deaths');
+
+    if (populationEl) populationEl.textContent = creatureTracker.count;
+    if (highestGenEl) highestGenEl.textContent = stats.highestGeneration;
+    if (avgGenEl) avgGenEl.textContent = stats.averageGeneration.toFixed(1);
+    if (avgEnergyEl) avgEnergyEl.textContent = stats.averageEnergy.toFixed(1);
+    if (birthsEl) birthsEl.textContent = stats.totalBirths;
+    if (deathsEl) deathsEl.textContent = stats.totalDeaths;
+
+    // Trait averages
+    const traits = stats.traitAverages;
+    const traitFoodEl = document.getElementById('stat-trait-food');
+    const traitPheromoneEl = document.getElementById('stat-trait-pheromone');
+    const traitSocialEl = document.getElementById('stat-trait-social');
+    const traitTurnEl = document.getElementById('stat-trait-turn');
+
+    if (traitFoodEl && traits.foodWeight !== undefined) {
+        traitFoodEl.textContent = traits.foodWeight.toFixed(2);
+    }
+    if (traitPheromoneEl && traits.pheromoneWeight !== undefined) {
+        traitPheromoneEl.textContent = traits.pheromoneWeight.toFixed(2);
+    }
+    if (traitSocialEl && traits.socialWeight !== undefined) {
+        traitSocialEl.textContent = traits.socialWeight.toFixed(2);
+    }
+    if (traitTurnEl && traits.turnRate !== undefined) {
+        traitTurnEl.textContent = traits.turnRate.toFixed(3);
+    }
 }
 
 /**
