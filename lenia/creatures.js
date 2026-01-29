@@ -22,6 +22,93 @@
  */
 
 /**
+ * CreatureMemory class - Spatial memory for creatures (Phase 11)
+ * Creatures remember locations where they found food or encountered danger.
+ * Memories influence movement decisions and fade over time.
+ */
+class CreatureMemory {
+    constructor(resolution = 8) {
+        this.resolution = resolution;
+        this.food = new Float32Array(resolution * resolution);
+        this.danger = new Float32Array(resolution * resolution);
+        this.decayRate = 0.995;
+    }
+
+    /**
+     * Convert world coordinates to memory grid index
+     */
+    worldToMemory(x, y, worldSize) {
+        const mx = Math.floor((x / worldSize) * this.resolution) % this.resolution;
+        const my = Math.floor((y / worldSize) * this.resolution) % this.resolution;
+        return my * this.resolution + mx;
+    }
+
+    /**
+     * Record a positive food memory at location
+     */
+    recordFood(x, y, worldSize, intensity = 0.3) {
+        const idx = this.worldToMemory(x, y, worldSize);
+        this.food[idx] = Math.min(1, this.food[idx] + intensity);
+    }
+
+    /**
+     * Record a negative danger memory at location
+     */
+    recordDanger(x, y, worldSize, intensity = 0.5) {
+        const idx = this.worldToMemory(x, y, worldSize);
+        this.danger[idx] = Math.min(1, this.danger[idx] + intensity);
+    }
+
+    /**
+     * Decay all memories toward zero
+     */
+    decay() {
+        for (let i = 0; i < this.food.length; i++) {
+            this.food[i] *= this.decayRate;
+            this.danger[i] *= this.decayRate;
+        }
+    }
+
+    /**
+     * Get net memory value at location (food - danger)
+     */
+    getValue(x, y, worldSize) {
+        const idx = this.worldToMemory(x, y, worldSize);
+        return this.food[idx] - this.danger[idx];
+    }
+
+    /**
+     * Compute gradient pointing toward positive memories / away from negative
+     */
+    getGradient(creatureX, creatureY, worldSize) {
+        const step = worldSize / this.resolution;
+        let gradX = 0, gradY = 0;
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        for (const [dx, dy] of dirs) {
+            const nx = (creatureX + dx * step + worldSize) % worldSize;
+            const ny = (creatureY + dy * step + worldSize) % worldSize;
+            const value = this.getValue(nx, ny, worldSize);
+            gradX += dx * value;
+            gradY += dy * value;
+        }
+        return { x: gradX, y: gradY };
+    }
+
+    /**
+     * Clone memory for offspring (optional - offspring may inherit partial memory)
+     */
+    clone(inheritanceRate = 0.5) {
+        const child = new CreatureMemory(this.resolution);
+        child.decayRate = this.decayRate;
+        for (let i = 0; i < this.food.length; i++) {
+            child.food[i] = this.food[i] * inheritanceRate;
+            child.danger[i] = this.danger[i] * inheritanceRate;
+        }
+        return child;
+    }
+}
+
+/**
  * Genome class - Heritable parameters for creatures
  * Each creature carries a genome that determines its behavior and physiology
  */
@@ -63,6 +150,11 @@ class Genome {
         this.sensorAngle = defaults.sensorAngle ?? 0;       // Direction of best sensing relative to heading (radians)
                                                             // 0 = forward, π = backward, ±π/2 = sideways
         this.sensorFocus = defaults.sensorFocus ?? 0.0;     // How focused the sensing is (0 = isotropic, 1 = narrow cone)
+
+        // Phase 11: Memory parameters
+        // These control how much creatures rely on past experience vs current stimuli
+        this.memoryWeight = defaults.memoryWeight ?? 0.3;   // 0-1: how much memory influences movement
+        this.memoryDecay = defaults.memoryDecay ?? 0.995;   // How fast memories fade (0.98-0.999)
     }
 
     /**
@@ -122,6 +214,12 @@ class Genome {
         // Sensor focus affects how directional vs isotropic sensing is
         child.sensorFocus = mutate(child.sensorFocus, 0, 1.0);
 
+        // Phase 11: Mutate memory parameters
+        // Memory weight affects how much creature relies on past experience
+        child.memoryWeight = mutate(child.memoryWeight, 0, 1.0);
+        // Memory decay affects how long memories persist
+        child.memoryDecay = mutate(child.memoryDecay, 0.98, 0.999);
+
         // Small chance to flip predator status
         if (Math.random() < mutationRate * 0.1) {
             child.isPredator = !child.isPredator;
@@ -155,7 +253,10 @@ class Genome {
             kernelOrientation: this.kernelOrientation,
             // Phase 8: Asymmetric sensing parameters
             sensorAngle: this.sensorAngle,
-            sensorFocus: this.sensorFocus
+            sensorFocus: this.sensorFocus,
+            // Phase 11: Memory parameters
+            memoryWeight: this.memoryWeight,
+            memoryDecay: this.memoryDecay
         });
     }
 
@@ -180,7 +281,10 @@ class Genome {
             kernelOrientation: sensory.kernelOrientation ?? 0,
             // Phase 8: Asymmetric sensing defaults
             sensorAngle: sensory.sensorAngle ?? 0,
-            sensorFocus: sensory.sensorFocus ?? 0.0
+            sensorFocus: sensory.sensorFocus ?? 0.0,
+            // Phase 11: Memory defaults
+            memoryWeight: sensory.memoryWeight ?? 0.3,
+            memoryDecay: sensory.memoryDecay ?? 0.995
         });
     }
 }
@@ -472,12 +576,22 @@ class CreatureTracker {
                     bestMatch.heading = Math.atan2(bestMatch.vy, bestMatch.vx);
                 }
 
+                // Phase 11: Ensure memory exists and set decay rate from genome
+                if (!bestMatch.memory) {
+                    bestMatch.memory = new CreatureMemory(8);
+                }
+                if (bestMatch.genome) {
+                    bestMatch.memory.decayRate = bestMatch.genome.memoryDecay;
+                }
+
                 newList.push(bestMatch);
             } else {
                 // Create new creature
                 newCreature.id = this.nextId++;
                 newCreature.lastSeen = frameNumber;
                 newCreature.heading = Math.random() * Math.PI * 2;
+                // Phase 11: Initialize memory for new creature
+                newCreature.memory = new CreatureMemory(8);
                 newList.push(newCreature);
             }
         }
@@ -580,6 +694,16 @@ class CreatureTracker {
         if (environment && environment.current) {
             senseX += environment.current.x;
             senseY += environment.current.y;
+        }
+
+        // Phase 11: Memory gradient influence
+        if (creature.memory) {
+            creature.memory.decay();  // Decay memories each frame
+            const memGrad = creature.memory.getGradient(creature.x, creature.y, this.size);
+            const memWeight = genome ? genome.memoryWeight : 0.3;
+            // Scale memory gradient to be comparable to other sensory inputs
+            senseX += memGrad.x * memWeight * 10;
+            senseY += memGrad.y * memWeight * 10;
         }
 
         return { x: senseX, y: senseY };
@@ -812,6 +936,11 @@ class CreatureTracker {
                     }
                 }
                 creature.energy += foodConsumed * foodEnergyGain;
+
+                // Phase 11: Record food memory when food is consumed
+                if (foodConsumed > 0 && creature.memory) {
+                    creature.memory.recordFood(creature.x, creature.y, this.size, foodConsumed * 0.1);
+                }
             }
 
             // Clamp energy
@@ -870,6 +999,10 @@ class CreatureTracker {
             this.stats.highestGeneration = newGen;
         }
 
+        // Phase 11: Offspring inherit partial memory from parent
+        const memory1 = parent.memory ? parent.memory.clone(0.5) : null;
+        const memory2 = parent.memory ? parent.memory.clone(0.5) : null;
+
         return {
             parentId: parent.id,
             parentX: parent.x,
@@ -880,13 +1013,15 @@ class CreatureTracker {
                     genome: genome1,
                     energy: energyPerChild,
                     generation: newGen,
-                    heading: parent.heading + Math.PI / 4  // Slight angle offset
+                    heading: parent.heading + Math.PI / 4,  // Slight angle offset
+                    memory: memory1
                 },
                 {
                     genome: genome2,
                     energy: energyPerChild,
                     generation: newGen,
-                    heading: parent.heading - Math.PI / 4
+                    heading: parent.heading - Math.PI / 4,
+                    memory: memory2
                 }
             ]
         };
@@ -956,6 +1091,15 @@ class CreatureTracker {
         creature.heading = data.heading;
         creature.lastSeen = frameNumber;
 
+        // Phase 11: Inherit memory from parent or create new
+        if (data.memory) {
+            creature.memory = data.memory;
+            creature.memory.decayRate = creature.genome.memoryDecay;
+        } else {
+            creature.memory = new CreatureMemory(8);
+            creature.memory.decayRate = creature.genome.memoryDecay;
+        }
+
         this.creatures.push(creature);
         return creature;
     }
@@ -986,7 +1130,9 @@ class CreatureTracker {
             // Phase 7: Directional traits
             kernelBias: 0,
             // Phase 8: Asymmetric sensing traits
-            sensorFocus: 0
+            sensorFocus: 0,
+            // Phase 11: Memory traits
+            memoryWeight: 0
         };
 
         for (const creature of this.creatures) {
@@ -1007,6 +1153,8 @@ class CreatureTracker {
                 traits.kernelBias += creature.genome.kernelBias;
                 // Phase 8: Asymmetric sensing traits
                 traits.sensorFocus += creature.genome.sensorFocus;
+                // Phase 11: Memory traits
+                traits.memoryWeight += creature.genome.memoryWeight;
             }
         }
 
@@ -1085,6 +1233,13 @@ class CreatureTracker {
 
                 // Catch radius based on both creature sizes (generous to allow predation)
                 const catchRadius = (hunter.radius + preyCreature.radius) * 1.0;
+
+                // Phase 11: Record danger memory for nearby prey (within 2x catch radius)
+                const dangerRadius = catchRadius * 2;
+                if (dist < dangerRadius && preyCreature.memory && !eaten.has(preyCreature.id)) {
+                    const intensity = 0.3 * (1 - dist / dangerRadius);
+                    preyCreature.memory.recordDanger(hunter.x, hunter.y, size, intensity);
+                }
 
                 if (dist < catchRadius) {
                     // Predation! Hunter eats prey

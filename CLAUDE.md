@@ -6,7 +6,7 @@ Creative coding experiments with Claude. Focus: artificial life, generative art,
 
 Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-### Status: Phase 10 Complete
+### Status: Phase 11 Complete
 
 1. Core Lenia with multiple kernel types
 2. Multi-channel ecosystems
@@ -17,7 +17,8 @@ Interactive web-based Lenia - continuous cellular automata producing lifelike cr
 7. Directional creatures - kernel bias creates asymmetric, oriented creatures
 8. Asymmetric sensing - creatures detect stimuli directionally (forward/backward focus)
 9. Sensor cone visualization - visual representation of creature sensing
-10. **Predator-Prey Ecosystem** - mixed populations of hunters and prey with predation mechanics
+10. Predator-Prey Ecosystem - mixed populations of hunters and prey with predation mechanics
+11. **Creature Memory & Spatial Learning** - creatures remember food locations and danger zones
 
 ### Key Files
 
@@ -294,3 +295,69 @@ In practice:
 - Population balance respawns extinct species
 
 This creates authentic ecological dynamics where predation is challenging and prey have realistic escape behaviors.
+
+---
+
+## Reflections (Phase 11)
+
+### Creature Memory & Spatial Learning
+
+Phase 11 adds spatial memory to creatures through the `CreatureMemory` class and two new genome parameters:
+- **memoryWeight** (0-1): How much past experience influences movement vs current stimuli
+- **memoryDecay** (0.98-0.999): How fast memories fade (lower = faster decay)
+
+### Memory Architecture
+
+Each creature maintains a coarse 8x8 spatial memory grid representing the world:
+- **Food memories**: Positive associations where food was consumed
+- **Danger memories**: Negative associations where predators were nearby
+
+The grid is much smaller than the world, creating "regions" of memory rather than exact positions. This is intentional - it makes memory more robust and generalizable.
+
+### Memory Gradient Integration
+
+Memory influences movement through gradient computation:
+1. Compute net memory value at nearby locations (food - danger)
+2. Generate gradient pointing toward positive memories / away from negative
+3. Blend with existing sensory gradients based on `memoryWeight`
+
+This allows creatures to:
+- Return to "favorite feeding grounds" (positive food memories)
+- Avoid "danger zones" (negative danger memories from near-predation events)
+
+### Species Memory Profiles
+
+- **Grazer**: memoryWeight=0.6, memoryDecay=0.995 - Strong food memory, returns to feeding spots
+- **Prey**: memoryWeight=0.5, memoryDecay=0.98 - Strong danger memory, longer retention of threats
+- **Hunter**: memoryWeight=0.4, memoryDecay=0.99 - Moderate memory for prey locations
+- **Schooler**: memoryWeight=0.2, memoryDecay=0.995 - Mild memory, prefers social cues
+
+### Memory Inheritance
+
+When creatures reproduce, offspring inherit 50% of parent's memory. This creates "cultural transmission" - offspring know about good/bad locations their parent experienced.
+
+### Implementation Notes
+
+**Recording Food Memories**: In `updateEnergy()`, when food is consumed, the creature records a positive memory at that location. Intensity scales with amount consumed.
+
+**Recording Danger Memories**: In `processPredation()`, when a hunter comes within 2x catch radius of prey, the prey records a danger memory at the hunter's location. Intensity scales inversely with distance.
+
+**Memory Decay**: Called once per frame in `computeSensoryInput()`. All memory values are multiplied by `decayRate`. With decay=0.995, a memory loses ~40% of its strength after 100 frames.
+
+### Evolutionary Dynamics
+
+Memory parameters evolve like other traits:
+- Prey that remember danger survive longer → higher memoryWeight should be selected for
+- Grazers that remember food locations are more efficient → memory provides advantage
+- Too high memoryWeight can be detrimental if memories are outdated
+
+### Observing Memory Effects
+
+Memory effects are subtle but visible when:
+- A grazer returns to a corner where it found food before
+- Prey consistently avoid certain areas after near-predation
+- Creatures show non-random patrol patterns over time
+
+Best observed with:
+- Single creature + food enabled (watch for return visits)
+- Ecosystem mode with evolution (watch prey avoidance patterns emerge)

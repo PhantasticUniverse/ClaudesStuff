@@ -505,6 +505,13 @@ function draw() {
         drawCreatureHeadings();
     }
 
+    // Phase 9: Draw sensor cones overlay
+    if (typeof sensoryEnabled !== 'undefined' && sensoryEnabled &&
+        typeof showSensorsOverlay !== 'undefined' && showSensorsOverlay &&
+        typeof creatureTracker !== 'undefined' && creatureTracker) {
+        drawSensorCones();
+    }
+
     // Update stats
     updateStats();
 }
@@ -549,6 +556,56 @@ function drawCreatureHeadings() {
         textSize(10);
         textAlign(CENTER, CENTER);
         text(creature.id, screenX, screenY - arrowLen - 5);
+    }
+
+    pop();
+}
+
+/**
+ * Phase 9: Draw sensor cones showing each creature's sensing direction and focus
+ */
+function drawSensorCones() {
+    if (!creatureTracker || creatureTracker.count === 0) return;
+
+    const sim = flowLenia || lenia;
+    const cellSize = width / sim.size;
+
+    push();
+    noStroke();
+
+    for (const creature of creatureTracker.getCreatures()) {
+        if (!creature.genome) continue;
+
+        const screenX = creature.x * cellSize;
+        const screenY = creature.y * cellSize;
+
+        // Get sensor parameters from genome
+        const sensorAngle = creature.genome.sensorAngle || 0;
+        const sensorFocus = creature.genome.sensorFocus || 0;
+
+        // Sensor direction = creature heading + genome's sensor angle offset
+        const sensorDir = creature.heading + sensorAngle;
+
+        // Cone half-angle: high focus = narrow cone, low focus = wide cone
+        // At focus=0: full circle (PI radians half-angle)
+        // At focus=1: very narrow (but we keep a minimum of PI/12 for visibility)
+        const minConeAngle = PI / 12;  // 15 degrees minimum
+        const coneHalfAngle = Math.max(minConeAngle, PI * (1 - sensorFocus));
+
+        // Cone radius based on creature size
+        const coneRadius = creature.radius * cellSize * 2.5;
+
+        // Color based on whether creature is a predator
+        const isPredator = creature.genome.isPredator;
+        if (isPredator) {
+            fill(255, 100, 100, 50);  // Red with 20% alpha (50/255)
+        } else {
+            fill(100, 200, 255, 50);  // Blue with 20% alpha (50/255)
+        }
+
+        // Draw the arc (sensor cone)
+        arc(screenX, screenY, coneRadius * 2, coneRadius * 2,
+            sensorDir - coneHalfAngle, sensorDir + coneHalfAngle, PIE);
     }
 
     pop();

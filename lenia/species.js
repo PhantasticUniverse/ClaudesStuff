@@ -430,7 +430,10 @@ const Species = {
                 kernelOrientation: 0,
                 // Sensing: mostly isotropic, explores evenly
                 sensorAngle: 0,
-                sensorFocus: 0.1
+                sensorFocus: 0.1,
+                // Memory: strong food memory for returning to feeding grounds
+                memoryWeight: 0.6,
+                memoryDecay: 0.995
             }
         },
         // Compact circular blob
@@ -509,7 +512,10 @@ const Species = {
                 kernelOrientation: 0,
                 // Sensing: mild forward bias for group coordination
                 sensorAngle: 0,
-                sensorFocus: 0.2
+                sensorFocus: 0.2,
+                // Memory: mild memory for group cohesion
+                memoryWeight: 0.2,
+                memoryDecay: 0.995
             }
         },
         // Streamlined shape for schooling
@@ -593,7 +599,10 @@ const Species = {
                 kernelOrientation: 0,
                 // Sensing: STRONG forward focus - spot prey ahead
                 sensorAngle: 0,
-                sensorFocus: 0.6
+                sensorFocus: 0.6,
+                // Memory: remembers where prey was found
+                memoryWeight: 0.4,
+                memoryDecay: 0.99
             }
         },
         // Larger, more aggressive shape
@@ -676,7 +685,10 @@ const Species = {
                 kernelOrientation: 0,
                 // Sensing: BACKWARD focus - detect approaching predators
                 sensorAngle: Math.PI,    // π = backward
-                sensorFocus: 0.4
+                sensorFocus: 0.4,
+                // Memory: strong danger memory, remembers where predators attacked
+                memoryWeight: 0.5,
+                memoryDecay: 0.98  // Remembers danger longer
             }
         },
         // Small, compact shape for speed
