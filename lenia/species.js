@@ -610,7 +610,7 @@ const Species = {
                 socialWeight: 1.5,
                 turnRate: 0.35,
                 speedPreference: 1.3,
-                metabolismRate: 0.025,   // Reduced metabolism (was 0.03) for hunter sustainability
+                metabolismRate: 0.018,   // Low metabolism for hunter sustainability (can survive longer between kills)
                 reproductionThreshold: 80, // Increased from 60 for slower population growth
                 reproductionCost: 0.65,
                 sizePreference: 1.3,
@@ -709,8 +709,8 @@ const Species = {
                 socialWeight: -0.8,
                 turnRate: 0.4,
                 speedPreference: 1.4,
-                metabolismRate: 0.025,   // Higher metabolism (always moving)
-                reproductionThreshold: 45, // Increased from 35 to prevent population explosion
+                metabolismRate: 0.03,    // Higher metabolism (always moving, burn energy faster)
+                reproductionThreshold: 55, // Increased from 45 to prevent population explosion
                 reproductionCost: 0.5,
                 sizePreference: 0.7,     // Stay small
                 isPredator: false,

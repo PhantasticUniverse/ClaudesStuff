@@ -663,11 +663,21 @@ class FlowLenia {
         const scale1 = mass1 / blob1Total;
         const scale2 = mass2 / blob2Total;
 
+        // CRITICAL: Clear offspring regions first to prevent mass duplication
+        // when offspring overlap with existing creatures
         for (const cell of blob1Cells) {
-            A[cell.idx] = Math.min(1, A[cell.idx] + cell.weight * scale1);
+            A[cell.idx] = 0;
         }
         for (const cell of blob2Cells) {
-            A[cell.idx] = Math.min(1, A[cell.idx] + cell.weight * scale2);
+            A[cell.idx] = 0;
+        }
+
+        // Now set (not add) the offspring mass
+        for (const cell of blob1Cells) {
+            A[cell.idx] = Math.min(1, cell.weight * scale1);
+        }
+        for (const cell of blob2Cells) {
+            A[cell.idx] = Math.min(1, cell.weight * scale2);
         }
 
         // Note: The actual offspring creatures will be detected and registered

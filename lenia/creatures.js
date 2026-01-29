@@ -415,7 +415,7 @@ class CreatureTracker {
             maxPopulation: 30,        // Maximum creatures allowed
             deathBecomesFood: true,   // Dead creature mass becomes food
             minCreatureEnergy: 10,    // Minimum energy for new creatures
-            predationEnergy: 2.5      // Phase 10/15: Energy gained per unit prey mass consumed (increased from 1.5 for hunter sustainability)
+            predationEnergy: 4.0      // Phase 15: Energy gained per unit prey mass consumed (increased from 2.5 for better hunter sustainability)
         };
 
         // Phase 10: Ecosystem mode
@@ -1827,32 +1827,15 @@ class CreatureTracker {
 
     /**
      * Check and maintain population balance in ecosystem mode
-     * Respawns species if they go extinct
+     * NOTE: Auto-respawning disabled to maintain mass conservation.
+     * Species extinction is a natural outcome if parameters aren't balanced.
      * @param {FlowLenia} flowLenia - Flow-Lenia instance for spawning
      */
     balancePopulation(flowLenia) {
-        if (!this.ecosystemMode || !this.evolution.enabled) return;
-
-        const hunters = this.creatures.filter(c => c.genome?.isPredator);
-        const prey = this.creatures.filter(c => c.genome && !c.genome.isPredator);
-        const size = flowLenia.size;
-
-        // Respawn prey if extinct (and hunters exist)
-        if (prey.length === 0 && hunters.length > 0) {
-            // Spawn 2 new prey at random locations
-            for (let i = 0; i < 2; i++) {
-                const x = Math.random() * size;
-                const y = Math.random() * size;
-                flowLenia.drawBlob(x, y, 10, 0.85);
-            }
-        }
-
-        // Respawn hunter if extinct (and prey exist)
-        if (hunters.length === 0 && prey.length > 0) {
-            const x = Math.random() * size;
-            const y = Math.random() * size;
-            flowLenia.drawBlob(x, y, 14, 0.9);
-        }
+        // Disabled - automatic respawning breaks mass conservation by adding
+        // mass via drawBlob(). Let the ecosystem find natural balance instead.
+        // If a species goes extinct, the test reveals parameter imbalance.
+        return;
     }
 
     /**
