@@ -18,6 +18,12 @@ let generation = 0;
 let lastFrameTime = 0;
 let fps = 0;
 
+// Phase 12: Signal visualization toggles
+let showAlarmSignals = false;
+let showHuntingSignals = false;
+let showMatingSignals = false;
+let showTerritorySignals = false;
+
 // Color maps
 const ColorMaps = {
     viridis: [
@@ -474,6 +480,51 @@ function draw() {
                         }
                     }
 
+                    // Phase 12: Bioluminescent signal overlays (additive blending)
+                    // Alarm signals - red/orange pulse
+                    if (typeof showAlarmSignals !== 'undefined' && showAlarmSignals) {
+                        const alarmVal = environment.alarmSignal[cellIdx];
+                        if (alarmVal > 0.01) {
+                            const intensity = Math.min(1, alarmVal * 2) * 0.7;
+                            r = Math.min(255, r + intensity * 255);
+                            g = Math.min(255, g + intensity * 100);
+                            b = Math.min(255, b + intensity * 50);
+                        }
+                    }
+
+                    // Hunting signals - magenta glow
+                    if (typeof showHuntingSignals !== 'undefined' && showHuntingSignals) {
+                        const huntingVal = environment.huntingSignal[cellIdx];
+                        if (huntingVal > 0.01) {
+                            const intensity = Math.min(1, huntingVal * 2) * 0.6;
+                            r = Math.min(255, r + intensity * 255);
+                            g = Math.min(255, g + intensity * 50);
+                            b = Math.min(255, b + intensity * 200);
+                        }
+                    }
+
+                    // Mating signals - cyan/blue pulse
+                    if (typeof showMatingSignals !== 'undefined' && showMatingSignals) {
+                        const matingVal = environment.matingSignal[cellIdx];
+                        if (matingVal > 0.01) {
+                            const intensity = Math.min(1, matingVal * 2) * 0.7;
+                            r = Math.min(255, r + intensity * 50);
+                            g = Math.min(255, g + intensity * 200);
+                            b = Math.min(255, b + intensity * 255);
+                        }
+                    }
+
+                    // Territory signals - green aura
+                    if (typeof showTerritorySignals !== 'undefined' && showTerritorySignals) {
+                        const territoryVal = environment.territorySignal[cellIdx];
+                        if (territoryVal > 0.01) {
+                            const intensity = Math.min(1, territoryVal * 2) * 0.5;
+                            r = Math.min(255, r + intensity * 50);
+                            g = Math.min(255, g + intensity * 255);
+                            b = Math.min(255, b + intensity * 100);
+                        }
+                    }
+
                     color = [Math.round(r), Math.round(g), Math.round(b)];
                 }
 
@@ -510,6 +561,19 @@ function draw() {
         typeof showSensorsOverlay !== 'undefined' && showSensorsOverlay &&
         typeof creatureTracker !== 'undefined' && creatureTracker) {
         drawSensorCones();
+    }
+
+    // Phase 12: Draw creature glow based on recent signal emissions
+    if (typeof sensoryEnabled !== 'undefined' && sensoryEnabled &&
+        typeof creatureTracker !== 'undefined' && creatureTracker) {
+        drawCreatureGlow();
+    }
+
+    // Phase 13: Draw flock links showing alignment neighbors
+    if (typeof sensoryEnabled !== 'undefined' && sensoryEnabled &&
+        typeof showFlockingOverlay !== 'undefined' && showFlockingOverlay &&
+        typeof creatureTracker !== 'undefined' && creatureTracker) {
+        drawFlockLinks();
     }
 
     // Update stats
@@ -606,6 +670,98 @@ function drawSensorCones() {
         // Draw the arc (sensor cone)
         arc(screenX, screenY, coneRadius * 2, coneRadius * 2,
             sensorDir - coneHalfAngle, sensorDir + coneHalfAngle, PIE);
+    }
+
+    pop();
+}
+
+/**
+ * Phase 12: Draw glowing aura around creatures that recently emitted signals
+ */
+function drawCreatureGlow() {
+    if (!creatureTracker || creatureTracker.count === 0) return;
+
+    const sim = flowLenia || lenia;
+    const cellSize = width / sim.size;
+
+    push();
+    noStroke();
+
+    for (const creature of creatureTracker.getCreatures()) {
+        const recentSignal = creatureTracker.getRecentSignal(creature);
+        if (!recentSignal) continue;
+
+        const screenX = creature.x * cellSize;
+        const screenY = creature.y * cellSize;
+        const glowRadius = creature.radius * cellSize * 3;
+
+        // Get signal color
+        const signalColor = CreatureTracker.getSignalColor(recentSignal.type);
+        const alpha = Math.floor(recentSignal.intensity * 100);
+
+        // Draw glowing rings (expanding outward)
+        for (let ring = 3; ring >= 1; ring--) {
+            const ringRadius = glowRadius * (1 + (3 - ring) * 0.3);
+            const ringAlpha = Math.floor(alpha * ring / 4);
+            fill(signalColor[0], signalColor[1], signalColor[2], ringAlpha);
+            ellipse(screenX, screenY, ringRadius * 2, ringRadius * 2);
+        }
+
+        // Inner bright core
+        fill(signalColor[0], signalColor[1], signalColor[2], alpha * 2);
+        ellipse(screenX, screenY, creature.radius * cellSize * 2, creature.radius * cellSize * 2);
+    }
+
+    pop();
+}
+
+/**
+ * Phase 13: Draw lines between flocking neighbors to visualize alignment
+ */
+function drawFlockLinks() {
+    if (!creatureTracker || creatureTracker.count === 0) return;
+
+    const sim = flowLenia || lenia;
+    const cellSize = width / sim.size;
+    const size = sim.size;
+
+    push();
+    strokeWeight(1);
+
+    for (const creature of creatureTracker.getCreatures()) {
+        // Only draw for non-predators with alignment behavior
+        if (!creature.genome) continue;
+        if (creature.genome.isPredator) continue;
+        if (creature.genome.alignmentWeight <= 0) continue;
+
+        const screenX = creature.x * cellSize;
+        const screenY = creature.y * cellSize;
+        const flockRadius = creature.genome.flockingRadius;
+
+        // Find neighbors within flocking radius
+        for (const other of creatureTracker.getCreatures()) {
+            if (other.id === creature.id) continue;
+            if (other.genome && other.genome.isPredator) continue;
+
+            // Calculate toroidal distance
+            let dx = other.x - creature.x;
+            let dy = other.y - creature.y;
+            if (dx > size / 2) dx -= size;
+            if (dx < -size / 2) dx += size;
+            if (dy > size / 2) dy -= size;
+            if (dy < -size / 2) dy += size;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < flockRadius && dist > 5) {
+                // Draw link with alpha based on distance (closer = stronger)
+                const alpha = Math.floor(80 * (1 - dist / flockRadius));
+                stroke(100, 200, 255, alpha);
+
+                const otherScreenX = creature.x * cellSize + dx * cellSize;
+                const otherScreenY = creature.y * cellSize + dy * cellSize;
+                line(screenX, screenY, otherScreenX, otherScreenY);
+            }
+        }
     }
 
     pop();

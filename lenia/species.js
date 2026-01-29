@@ -433,7 +433,19 @@ const Species = {
                 sensorFocus: 0.1,
                 // Memory: strong food memory for returning to feeding grounds
                 memoryWeight: 0.6,
-                memoryDecay: 0.995
+                memoryDecay: 0.995,
+                // Phase 12: Signal sensitivity - mild responses
+                alarmSensitivity: 0.3,      // Some response to danger
+                huntingSensitivity: 0.0,    // Ignores hunting activity
+                matingSensitivity: 0.6,     // Strong mating attraction
+                territorySensitivity: 0.2,  // Mild territorial spacing
+                signalEmissionRate: 0.4,    // Moderate signaling
+                // Phase 13: Collective behavior - territorial grazer
+                alignmentWeight: 0.2,       // Light flocking
+                flockingRadius: 25,         // Small flock awareness
+                packCoordination: 0.0,      // Not a hunter
+                territoryRadius: 45,        // Larger grazing territory
+                homingStrength: 0.25        // Strong homing instinct
             }
         },
         // Compact circular blob
@@ -515,7 +527,19 @@ const Species = {
                 sensorFocus: 0.2,
                 // Memory: mild memory for group cohesion
                 memoryWeight: 0.2,
-                memoryDecay: 0.995
+                memoryDecay: 0.995,
+                // Phase 12: Signal sensitivity - social coordination
+                alarmSensitivity: 0.5,      // Responds to group alarms
+                huntingSensitivity: -0.2,   // Mild avoidance of hunting activity
+                matingSensitivity: 0.5,     // Moderate mating attraction
+                territorySensitivity: 0.1,  // Low territorial behavior
+                signalEmissionRate: 0.6,    // Active signaler for group coordination
+                // Phase 13: Collective behavior - strong schooling
+                alignmentWeight: 0.6,       // Strong heading alignment
+                flockingRadius: 35,         // Medium flock awareness
+                packCoordination: 0.0,      // Not a hunter
+                territoryRadius: 0,         // No territory (nomadic)
+                homingStrength: 0.0         // No homing instinct
             }
         },
         // Streamlined shape for schooling
@@ -602,7 +626,19 @@ const Species = {
                 sensorFocus: 0.6,
                 // Memory: remembers where prey was found
                 memoryWeight: 0.4,
-                memoryDecay: 0.99
+                memoryDecay: 0.99,
+                // Phase 12: Signal sensitivity - pack hunting behavior
+                alarmSensitivity: 0.0,      // Ignores prey warnings completely
+                huntingSensitivity: 0.6,    // Converges on successful hunts
+                matingSensitivity: 0.3,     // Moderate mating response
+                territorySensitivity: 0.3,  // Some territorial spacing
+                signalEmissionRate: 0.5,    // Signals on successful kills
+                // Phase 13: Collective behavior - pack hunting
+                alignmentWeight: 0.0,       // No flocking (predators don't school)
+                flockingRadius: 0,          // N/A
+                packCoordination: 0.5,      // Moderate flanking behavior
+                territoryRadius: 50,        // Defends hunting grounds
+                homingStrength: 0.1         // Light homing instinct
             }
         },
         // Larger, more aggressive shape
@@ -688,7 +724,19 @@ const Species = {
                 sensorFocus: 0.4,
                 // Memory: strong danger memory, remembers where predators attacked
                 memoryWeight: 0.5,
-                memoryDecay: 0.98  // Remembers danger longer
+                memoryDecay: 0.98,  // Remembers danger longer
+                // Phase 12: Signal sensitivity - survival-focused
+                alarmSensitivity: 0.8,      // Very responsive to danger signals
+                huntingSensitivity: -0.3,   // Flees from hunting activity
+                matingSensitivity: 0.4,     // Moderate mating response
+                territorySensitivity: 0.1,  // Low territorial behavior
+                signalEmissionRate: 0.7,    // Actively warns others of danger
+                // Phase 13: Collective behavior - light schooling
+                alignmentWeight: 0.4,       // Moderate heading alignment
+                flockingRadius: 30,         // Medium flock awareness
+                packCoordination: 0.0,      // Not a hunter
+                territoryRadius: 35,        // Small territory
+                homingStrength: 0.15        // Moderate homing instinct
             }
         },
         // Small, compact shape for speed

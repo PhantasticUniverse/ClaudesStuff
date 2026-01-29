@@ -32,6 +32,7 @@ let showFoodOverlay = true;
 let showPheromoneOverlay = false;
 let showHeadingsOverlay = false;
 let showSensorsOverlay = false;
+let showFlockingOverlay = false;  // Phase 13: Flock link visualization
 
 function initUI() {
     // Initialize multi-channel, flow-lenia, and explorer systems
@@ -198,6 +199,60 @@ function initUI() {
         showSensorsOverlay = !showSensorsOverlay;
         const btn = document.getElementById('btn-show-sensors');
         btn.classList.toggle('primary', showSensorsOverlay);
+    });
+
+    // Phase 13: Flock link visualization toggle
+    document.getElementById('btn-show-flocking').addEventListener('click', () => {
+        showFlockingOverlay = !showFlockingOverlay;
+        const btn = document.getElementById('btn-show-flocking');
+        btn.classList.toggle('primary', showFlockingOverlay);
+    });
+
+    // Phase 12: Signal visualization toggles
+    document.getElementById('btn-show-alarm').addEventListener('click', () => {
+        showAlarmSignals = !showAlarmSignals;
+        const btn = document.getElementById('btn-show-alarm');
+        btn.classList.toggle('primary', showAlarmSignals);
+    });
+
+    document.getElementById('btn-show-hunting').addEventListener('click', () => {
+        showHuntingSignals = !showHuntingSignals;
+        const btn = document.getElementById('btn-show-hunting');
+        btn.classList.toggle('primary', showHuntingSignals);
+    });
+
+    document.getElementById('btn-show-mating').addEventListener('click', () => {
+        showMatingSignals = !showMatingSignals;
+        const btn = document.getElementById('btn-show-mating');
+        btn.classList.toggle('primary', showMatingSignals);
+    });
+
+    document.getElementById('btn-show-territory').addEventListener('click', () => {
+        showTerritorySignals = !showTerritorySignals;
+        const btn = document.getElementById('btn-show-territory');
+        btn.classList.toggle('primary', showTerritorySignals);
+    });
+
+    document.getElementById('btn-show-all-signals').addEventListener('click', () => {
+        showAlarmSignals = true;
+        showHuntingSignals = true;
+        showMatingSignals = true;
+        showTerritorySignals = true;
+        document.getElementById('btn-show-alarm').classList.add('primary');
+        document.getElementById('btn-show-hunting').classList.add('primary');
+        document.getElementById('btn-show-mating').classList.add('primary');
+        document.getElementById('btn-show-territory').classList.add('primary');
+    });
+
+    document.getElementById('btn-hide-all-signals').addEventListener('click', () => {
+        showAlarmSignals = false;
+        showHuntingSignals = false;
+        showMatingSignals = false;
+        showTerritorySignals = false;
+        document.getElementById('btn-show-alarm').classList.remove('primary');
+        document.getElementById('btn-show-hunting').classList.remove('primary');
+        document.getElementById('btn-show-mating').classList.remove('primary');
+        document.getElementById('btn-show-territory').classList.remove('primary');
     });
 
     // Phase 5: Evolution mode toggle
@@ -880,6 +935,7 @@ function setSensoryMode(enabled) {
     const behaviorSection = document.getElementById('creature-behavior-section');
     const visualizationSection = document.getElementById('visualization-section');
     const evolutionSection = document.getElementById('evolution-section');
+    const signalSection = document.getElementById('signal-section');  // Phase 12
 
     if (enabled) {
         btnOff.classList.remove('primary');
@@ -889,10 +945,16 @@ function setSensoryMode(enabled) {
         behaviorSection.style.display = 'block';
         visualizationSection.style.display = 'block';
         evolutionSection.style.display = 'block';  // Show evolution controls
+        if (signalSection) signalSection.style.display = 'block';  // Phase 12: Show signal controls
 
         // Enable sensory mode in flow lenia
         if (flowLenia) {
             flowLenia.setSensoryMode(true);
+        }
+
+        // Phase 12: Set environment reference in creature tracker for signal emission
+        if (creatureTracker && environment) {
+            creatureTracker.setEnvironment(environment);
         }
 
         // Initialize environment if needed
@@ -907,6 +969,7 @@ function setSensoryMode(enabled) {
         behaviorSection.style.display = 'none';
         visualizationSection.style.display = 'none';
         evolutionSection.style.display = 'none';  // Hide evolution controls
+        if (signalSection) signalSection.style.display = 'none';  // Phase 12: Hide signal controls
 
         // Disable evolution when disabling sensory mode
         setEvolutionMode(false);
@@ -1258,6 +1321,21 @@ function updateEvolutionStats() {
     const traitMemoryWeightEl = document.getElementById('stat-trait-memory-weight');
     if (traitMemoryWeightEl && traits.memoryWeight !== undefined) {
         traitMemoryWeightEl.textContent = traits.memoryWeight.toFixed(3);
+    }
+
+    // Phase 13: Collective behavior trait averages
+    const traitAlignmentEl = document.getElementById('stat-trait-alignment');
+    const traitPackCoordEl = document.getElementById('stat-trait-pack-coord');
+    const traitHomingEl = document.getElementById('stat-trait-homing');
+
+    if (traitAlignmentEl && traits.alignmentWeight !== undefined) {
+        traitAlignmentEl.textContent = traits.alignmentWeight.toFixed(3);
+    }
+    if (traitPackCoordEl && traits.packCoordination !== undefined) {
+        traitPackCoordEl.textContent = traits.packCoordination.toFixed(3);
+    }
+    if (traitHomingEl && traits.homingStrength !== undefined) {
+        traitHomingEl.textContent = traits.homingStrength.toFixed(3);
     }
 }
 

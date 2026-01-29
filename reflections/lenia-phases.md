@@ -165,3 +165,84 @@ Critical bug: mass increased +3700% during reproduction.
 Best observed with:
 - Single creature + food (watch for return visits)
 - Ecosystem mode with evolution (watch prey avoidance patterns)
+
+---
+
+## Phase 12: Visual Signaling & Bioluminescence
+
+### Signal Types
+
+Four distinct signal channels for creature communication:
+- **Alarm** (red/orange): Prey emit when predator nearby - warns others
+- **Hunting** (magenta): Hunters emit on successful catch - draws pack
+- **Mating** (cyan): Emitted when energy approaches reproduction threshold
+- **Territory** (green): Emitted when inside home territory
+
+### Signal Integration
+
+Signals are stored as separate Float32 arrays in Environment, each with independent decay rates. Creatures sense signal gradients and respond based on genome sensitivity parameters.
+
+### Emergent Behaviors
+
+- Prey warning chains (alarm cascades)
+- Hunter convergence on kills
+- Mating aggregations when food is plentiful
+- Territorial spacing patterns
+
+---
+
+## Phase 13: Emergent Collective Behaviors
+
+### Three Core Mechanisms
+
+**1. Flocking/Schooling (Boids-inspired)**
+
+Prey align their headings with nearby neighbors:
+- `alignmentWeight` (0-1): Strength of heading matching
+- `flockingRadius` (15-50 pixels): Neighbor detection range
+
+Only non-predators participate in alignment. Uses unit heading vectors (cos/sin of heading angle) averaged across neighbors within radius.
+
+**2. Pack Hunting Coordination**
+
+Hunters coordinate to flank prey:
+- `packCoordination` (0-1): Flanking vs direct chase preference
+
+When multiple hunters detect the same prey, they approach from perpendicular angles rather than all chasing directly. Uses creature ID parity to determine which side to flank from, avoiding oscillation.
+
+**3. Territory & Homing**
+
+Creatures remember and return to their birthplace:
+- `homeX/homeY`: Birth location (set on creature creation)
+- `territoryRadius` (0-80 pixels): Size of defended area
+- `homingStrength` (0-0.5): Pull toward birthplace
+
+When outside territory, creatures experience gentle attraction toward home. When inside core territory (80% of radius), they emit territory signals.
+
+### Species Behavioral Profiles
+
+| Species | Alignment | Pack Coord | Territory | Homing |
+|---------|-----------|------------|-----------|--------|
+| Grazer  | 0.2 (light) | 0.0 | 45px | 0.25 (strong) |
+| Schooler | 0.6 (strong) | 0.0 | 0 (nomadic) | 0.0 |
+| Hunter | 0.0 | 0.5 (moderate) | 50px | 0.1 (light) |
+| Prey | 0.4 (moderate) | 0.0 | 35px | 0.15 |
+
+### Visualization: Flock Links
+
+New overlay button "Flock Links" draws cyan lines between flocking neighbors, showing the alignment network. Alpha decreases with distance for visual clarity.
+
+### Implementation Notes
+
+**Toroidal Distance**: All distance calculations use `toroidalDelta()` for proper wrapping at world edges.
+
+**Performance**: Alignment and pack hunting are O(N²) in worst case. For populations <50, this remains performant. Larger populations may need spatial hashing optimization.
+
+**Flanking Side Selection**: Uses `creature.id % 2` to consistently choose flanking side, preventing hunters from oscillating between sides each frame.
+
+### Emergent Patterns to Watch For
+
+- **Murmuration-like waves**: Schools of prey flowing together, splitting around obstacles
+- **Coordinated hunts**: Predators forming crescents around prey groups
+- **Territorial mosaic**: Distinct zones with spacing between groups
+- **Dynamic equilibrium**: Balance between predator coordination and prey schooling

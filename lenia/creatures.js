@@ -155,6 +155,22 @@ class Genome {
         // These control how much creatures rely on past experience vs current stimuli
         this.memoryWeight = defaults.memoryWeight ?? 0.3;   // 0-1: how much memory influences movement
         this.memoryDecay = defaults.memoryDecay ?? 0.995;   // How fast memories fade (0.98-0.999)
+
+        // Phase 12: Signal sensitivity parameters (bioluminescence)
+        // These control how creatures respond to visual signals from others
+        this.alarmSensitivity = defaults.alarmSensitivity ?? 0.5;     // Response to alarm signals (prey flee, hunters ignore)
+        this.huntingSensitivity = defaults.huntingSensitivity ?? 0.3; // Response to hunting signals (hunters converge)
+        this.matingSensitivity = defaults.matingSensitivity ?? 0.4;   // Attraction to mating signals
+        this.territorySensitivity = defaults.territorySensitivity ?? 0.2; // Response to territory markings
+        this.signalEmissionRate = defaults.signalEmissionRate ?? 0.5; // How strongly creature signals (0-1)
+
+        // Phase 13: Collective behavior parameters
+        // These control emergent group behaviors like schooling and pack hunting
+        this.alignmentWeight = defaults.alignmentWeight ?? 0.3;       // Heading alignment strength for flocking (0-1)
+        this.flockingRadius = defaults.flockingRadius ?? 30;          // Distance to consider neighbors for alignment
+        this.packCoordination = defaults.packCoordination ?? 0.4;     // Flanking vs direct chase for hunters (0-1)
+        this.territoryRadius = defaults.territoryRadius ?? 40;        // Home territory size in pixels
+        this.homingStrength = defaults.homingStrength ?? 0.2;         // Attraction to birthplace (0-1)
     }
 
     /**
@@ -220,6 +236,30 @@ class Genome {
         // Memory decay affects how long memories persist
         child.memoryDecay = mutate(child.memoryDecay, 0.98, 0.999);
 
+        // Phase 12: Mutate signal sensitivity parameters
+        // Alarm sensitivity - prey benefit from high values, hunters from low
+        child.alarmSensitivity = mutate(child.alarmSensitivity, 0, 1.0);
+        // Hunting sensitivity - hunters benefit from high values to converge
+        child.huntingSensitivity = mutate(child.huntingSensitivity, -0.5, 1.0);
+        // Mating sensitivity - affects clustering for reproduction
+        child.matingSensitivity = mutate(child.matingSensitivity, 0, 1.0);
+        // Territory sensitivity - affects spacing between creatures
+        child.territorySensitivity = mutate(child.territorySensitivity, -0.5, 1.0);
+        // Signal emission rate - affects how visible creature is
+        child.signalEmissionRate = mutate(child.signalEmissionRate, 0.1, 1.0);
+
+        // Phase 13: Mutate collective behavior parameters
+        // Alignment weight - affects how strongly creature matches neighbor headings
+        child.alignmentWeight = mutate(child.alignmentWeight, 0, 1.0);
+        // Flocking radius - distance to consider neighbors for alignment
+        child.flockingRadius = mutate(child.flockingRadius, 15, 50);
+        // Pack coordination - hunters: flanking vs direct chase
+        child.packCoordination = mutate(child.packCoordination, 0, 1.0);
+        // Territory radius - size of home territory
+        child.territoryRadius = mutate(child.territoryRadius, 0, 80);
+        // Homing strength - attraction to birthplace
+        child.homingStrength = mutate(child.homingStrength, 0, 0.5);
+
         // Small chance to flip predator status
         if (Math.random() < mutationRate * 0.1) {
             child.isPredator = !child.isPredator;
@@ -256,7 +296,19 @@ class Genome {
             sensorFocus: this.sensorFocus,
             // Phase 11: Memory parameters
             memoryWeight: this.memoryWeight,
-            memoryDecay: this.memoryDecay
+            memoryDecay: this.memoryDecay,
+            // Phase 12: Signal sensitivity parameters
+            alarmSensitivity: this.alarmSensitivity,
+            huntingSensitivity: this.huntingSensitivity,
+            matingSensitivity: this.matingSensitivity,
+            territorySensitivity: this.territorySensitivity,
+            signalEmissionRate: this.signalEmissionRate,
+            // Phase 13: Collective behavior parameters
+            alignmentWeight: this.alignmentWeight,
+            flockingRadius: this.flockingRadius,
+            packCoordination: this.packCoordination,
+            territoryRadius: this.territoryRadius,
+            homingStrength: this.homingStrength
         });
     }
 
@@ -284,7 +336,19 @@ class Genome {
             sensorFocus: sensory.sensorFocus ?? 0.0,
             // Phase 11: Memory defaults
             memoryWeight: sensory.memoryWeight ?? 0.3,
-            memoryDecay: sensory.memoryDecay ?? 0.995
+            memoryDecay: sensory.memoryDecay ?? 0.995,
+            // Phase 12: Signal sensitivity defaults
+            alarmSensitivity: sensory.alarmSensitivity ?? 0.5,
+            huntingSensitivity: sensory.huntingSensitivity ?? 0.3,
+            matingSensitivity: sensory.matingSensitivity ?? 0.4,
+            territorySensitivity: sensory.territorySensitivity ?? 0.2,
+            signalEmissionRate: sensory.signalEmissionRate ?? 0.5,
+            // Phase 13: Collective behavior defaults
+            alignmentWeight: sensory.alignmentWeight ?? 0.3,
+            flockingRadius: sensory.flockingRadius ?? 30,
+            packCoordination: sensory.packCoordination ?? 0.4,
+            territoryRadius: sensory.territoryRadius ?? 40,
+            homingStrength: sensory.homingStrength ?? 0.2
         });
     }
 }
@@ -358,6 +422,12 @@ class CreatureTracker {
 
         // Working buffers
         this.visited = new Uint8Array(size * size);
+
+        // Phase 12: Environment reference for signal emission
+        this.environment = null;
+
+        // Phase 12: Track recent signal emissions for glow effect
+        this.recentSignals = new Map();  // creatureId -> { type, intensity, frame }
     }
 
     /**
@@ -383,6 +453,10 @@ class CreatureTracker {
             this.generation = 0;      // Generation number (0 = original)
             this.parentId = null;     // ID of parent creature (null if original)
             this.birthFrame = 0;      // Frame when creature was born
+
+            // Phase 13: Territory/homing fields
+            this.homeX = null;        // Birth location X (set when first detected)
+            this.homeY = null;        // Birth location Y (set when first detected)
         }
 
         /**
@@ -592,6 +666,9 @@ class CreatureTracker {
                 newCreature.heading = Math.random() * Math.PI * 2;
                 // Phase 11: Initialize memory for new creature
                 newCreature.memory = new CreatureMemory(8);
+                // Phase 13: Set home location to birth position
+                newCreature.homeX = newCreature.x;
+                newCreature.homeY = newCreature.y;
                 newList.push(newCreature);
             }
         }
@@ -704,6 +781,143 @@ class CreatureTracker {
             // Scale memory gradient to be comparable to other sensory inputs
             senseX += memGrad.x * memWeight * 10;
             senseY += memGrad.y * memWeight * 10;
+        }
+
+        // Phase 12: Signal gradient sensing (bioluminescence response)
+        if (environment && genome) {
+            // Alarm signals - prey flee FROM them, hunters ignore
+            const alarmGrad = environment.getSignalGradient('alarm', creature.x, creature.y);
+            if (!genome.isPredator) {
+                // Prey flee from alarm signals (negative attraction = repulsion)
+                senseX -= alarmGrad.x * genome.alarmSensitivity * 15;
+                senseY -= alarmGrad.y * genome.alarmSensitivity * 15;
+            }
+
+            // Hunting signals - hunters attracted TO them (pack hunting)
+            const huntingGrad = environment.getSignalGradient('hunting', creature.x, creature.y);
+            if (genome.isPredator) {
+                senseX += huntingGrad.x * genome.huntingSensitivity * 10;
+                senseY += huntingGrad.y * genome.huntingSensitivity * 10;
+            } else {
+                // Prey flee from hunting signals too
+                senseX -= huntingGrad.x * Math.abs(genome.huntingSensitivity) * 8;
+                senseY -= huntingGrad.y * Math.abs(genome.huntingSensitivity) * 8;
+            }
+
+            // Mating signals - all creatures attracted when fertile
+            const reproThreshold = genome.reproductionThreshold || 50;
+            if (creature.energy > reproThreshold * 0.5) {
+                const matingGrad = environment.getSignalGradient('mating', creature.x, creature.y);
+                const fertility = Math.min(1, (creature.energy - reproThreshold * 0.5) / (reproThreshold * 0.5));
+                senseX += matingGrad.x * genome.matingSensitivity * fertility * 8;
+                senseY += matingGrad.y * genome.matingSensitivity * fertility * 8;
+            }
+
+            // Territory signals - same species repelled, different attracted (or vice versa)
+            const territoryGrad = environment.getSignalGradient('territory', creature.x, creature.y);
+            // Generally repelled from territory markings (spacing behavior)
+            senseX -= territoryGrad.x * genome.territorySensitivity * 5;
+            senseY -= territoryGrad.y * genome.territorySensitivity * 5;
+        }
+
+        // Phase 13: Homing behavior - attraction to birthplace when outside territory
+        if (genome && genome.homingStrength > 0 && creature.homeX !== null) {
+            const homeDistX = this.toroidalDelta(creature.homeX, creature.x, this.size);
+            const homeDistY = this.toroidalDelta(creature.homeY, creature.y, this.size);
+            const homeDist = Math.sqrt(homeDistX * homeDistX + homeDistY * homeDistY);
+
+            if (homeDist > genome.territoryRadius && homeDist > 1) {
+                // Outside territory - gentle pull home
+                const homeForce = genome.homingStrength * 0.5;
+                senseX += (homeDistX / homeDist) * homeForce * 10;
+                senseY += (homeDistY / homeDist) * homeForce * 10;
+            }
+        }
+
+        // Phase 13: Flocking alignment (prey only - non-predators)
+        if (genome && !genome.isPredator && genome.alignmentWeight > 0) {
+            let avgHeadingX = 0, avgHeadingY = 0;
+            let neighborCount = 0;
+
+            for (const other of this.creatures) {
+                if (other.id === creature.id) continue;
+                if (other.genome && other.genome.isPredator) continue;  // Only align with fellow prey
+
+                const dx = this.toroidalDelta(other.x, creature.x, this.size);
+                const dy = this.toroidalDelta(other.y, creature.y, this.size);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < genome.flockingRadius && dist > 5) {
+                    // Use unit heading vectors for alignment
+                    avgHeadingX += Math.cos(other.heading);
+                    avgHeadingY += Math.sin(other.heading);
+                    neighborCount++;
+                }
+            }
+
+            if (neighborCount > 0) {
+                avgHeadingX /= neighborCount;
+                avgHeadingY /= neighborCount;
+
+                // Blend alignment into sensory input
+                senseX += avgHeadingX * genome.alignmentWeight * 5;
+                senseY += avgHeadingY * genome.alignmentWeight * 5;
+            }
+        }
+
+        // Phase 13: Pack hunting coordination (hunters only)
+        if (genome && genome.isPredator && genome.packCoordination > 0) {
+            // Find nearest prey
+            let nearestPrey = null;
+            let nearestDist = Infinity;
+
+            for (const other of this.creatures) {
+                if (other.genome && other.genome.isPredator) continue;  // Skip other hunters
+                const dx = this.toroidalDelta(other.x, creature.x, this.size);
+                const dy = this.toroidalDelta(other.y, creature.y, this.size);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestPrey = other;
+                }
+            }
+
+            if (nearestPrey && nearestDist < 60) {
+                // Check for other hunters targeting same prey
+                let otherHuntersNearby = 0;
+                let avgHunterAngle = 0;
+
+                for (const other of this.creatures) {
+                    if (!other.genome || !other.genome.isPredator || other.id === creature.id) continue;
+                    const otherToPreyX = this.toroidalDelta(nearestPrey.x, other.x, this.size);
+                    const otherToPreyY = this.toroidalDelta(nearestPrey.y, other.y, this.size);
+                    const otherToPrey = Math.sqrt(otherToPreyX * otherToPreyX + otherToPreyY * otherToPreyY);
+                    if (otherToPrey < 80) {
+                        otherHuntersNearby++;
+                        avgHunterAngle += Math.atan2(otherToPreyY, otherToPreyX);
+                    }
+                }
+
+                if (otherHuntersNearby > 0) {
+                    // Flank: approach from perpendicular angle
+                    const directDx = this.toroidalDelta(nearestPrey.x, creature.x, this.size);
+                    const directDy = this.toroidalDelta(nearestPrey.y, creature.y, this.size);
+                    const directAngle = Math.atan2(directDy, directDx);
+                    avgHunterAngle /= otherHuntersNearby;
+
+                    // Rotate 90 degrees from average hunter approach
+                    // Use consistent side based on creature ID to avoid oscillation
+                    const side = (creature.id % 2 === 0) ? 1 : -1;
+                    const flankAngle = avgHunterAngle + Math.PI / 2 * side;
+
+                    // Blend between direct chase and flanking
+                    const finalAngle = directAngle * (1 - genome.packCoordination) +
+                                       flankAngle * genome.packCoordination;
+
+                    senseX += Math.cos(finalAngle) * 3;
+                    senseY += Math.sin(finalAngle) * 3;
+                }
+            }
         }
 
         return { x: senseX, y: senseY };
@@ -969,6 +1183,29 @@ class CreatureTracker {
             if (creature.canReproduce && this.creatures.length < this.evolution.maxPopulation) {
                 reproduce.push(creature);
             }
+
+            // Phase 12: Emit mating signal when energy is above 80% of reproduction threshold
+            if (creature.genome) {
+                const threshold = creature.genome.reproductionThreshold;
+                if (creature.energy > threshold * 0.8 && creature.energy < threshold) {
+                    // Emit mating signal - intensity based on how close to threshold
+                    const readiness = (creature.energy - threshold * 0.8) / (threshold * 0.2);
+                    this.emitSignal('mating', creature.x, creature.y, 0.5 * readiness, creature);
+                }
+
+                // Phase 13: Emit territory signal when inside core territory
+                if (creature.homeX !== null && creature.genome.territoryRadius > 0) {
+                    const homeDistX = this.toroidalDelta(creature.homeX, creature.x, this.size);
+                    const homeDistY = this.toroidalDelta(creature.homeY, creature.y, this.size);
+                    const homeDist = Math.sqrt(homeDistX * homeDistX + homeDistY * homeDistY);
+
+                    // Inside core territory (80% of territory radius) - emit territory signal
+                    if (homeDist < creature.genome.territoryRadius * 0.8) {
+                        const intensity = creature.genome.signalEmissionRate * 0.3;
+                        this.emitSignal('territory', creature.x, creature.y, intensity, creature);
+                    }
+                }
+            }
         }
 
         return { reproduce, die };
@@ -1100,6 +1337,10 @@ class CreatureTracker {
             creature.memory.decayRate = creature.genome.memoryDecay;
         }
 
+        // Phase 13: Set home location to birth position
+        creature.homeX = x;
+        creature.homeY = y;
+
         this.creatures.push(creature);
         return creature;
     }
@@ -1132,7 +1373,11 @@ class CreatureTracker {
             // Phase 8: Asymmetric sensing traits
             sensorFocus: 0,
             // Phase 11: Memory traits
-            memoryWeight: 0
+            memoryWeight: 0,
+            // Phase 13: Collective behavior traits
+            alignmentWeight: 0,
+            packCoordination: 0,
+            homingStrength: 0
         };
 
         for (const creature of this.creatures) {
@@ -1155,6 +1400,10 @@ class CreatureTracker {
                 traits.sensorFocus += creature.genome.sensorFocus;
                 // Phase 11: Memory traits
                 traits.memoryWeight += creature.genome.memoryWeight;
+                // Phase 13: Collective behavior traits
+                traits.alignmentWeight += creature.genome.alignmentWeight;
+                traits.packCoordination += creature.genome.packCoordination;
+                traits.homingStrength += creature.genome.homingStrength;
             }
         }
 
@@ -1208,6 +1457,83 @@ class CreatureTracker {
         };
     }
 
+    // ==================== Phase 12: Bioluminescent Signaling ====================
+
+    /**
+     * Phase 12: Set environment reference for signal emission
+     */
+    setEnvironment(environment) {
+        this.environment = environment;
+    }
+
+    /**
+     * Phase 12: Emit a visual signal from a creature
+     * @param {string} type - 'alarm', 'hunting', 'mating', 'territory'
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     * @param {number} intensity - Signal strength (0-1)
+     * @param {Creature} creature - The emitting creature (for tracking glow)
+     */
+    emitSignal(type, x, y, intensity, creature = null) {
+        if (!this.environment) return;
+
+        // Scale intensity by creature's signal emission rate if available
+        let finalIntensity = intensity;
+        if (creature && creature.genome) {
+            finalIntensity *= creature.genome.signalEmissionRate;
+        }
+
+        // Emit signal to environment
+        this.environment.emitSignal(type, x, y, finalIntensity);
+
+        // Track recent emission for creature glow effect
+        if (creature) {
+            this.recentSignals.set(creature.id, {
+                type: type,
+                intensity: finalIntensity,
+                frame: Date.now()
+            });
+        }
+    }
+
+    /**
+     * Phase 12: Get recent signal info for a creature (for glow rendering)
+     */
+    getRecentSignal(creature) {
+        const signal = this.recentSignals.get(creature.id);
+        if (!signal) return null;
+
+        // Fade out over 500ms
+        const elapsed = Date.now() - signal.frame;
+        if (elapsed > 500) {
+            this.recentSignals.delete(creature.id);
+            return null;
+        }
+
+        return {
+            type: signal.type,
+            intensity: signal.intensity * (1 - elapsed / 500)
+        };
+    }
+
+    /**
+     * Phase 12: Get signal color for a type
+     */
+    static getSignalColor(type) {
+        switch (type) {
+            case 'alarm':
+                return [255, 100, 50];   // Red/orange
+            case 'hunting':
+                return [255, 50, 200];   // Magenta
+            case 'mating':
+                return [50, 200, 255];   // Cyan
+            case 'territory':
+                return [50, 255, 100];   // Green
+            default:
+                return [255, 255, 255];
+        }
+    }
+
     // ==================== Phase 10: Predator-Prey Ecosystem ====================
 
     /**
@@ -1221,6 +1547,7 @@ class CreatureTracker {
         const hunters = this.creatures.filter(c => c.genome?.isPredator);
         const prey = this.creatures.filter(c => c.genome && !c.genome.isPredator);
         const eaten = new Set();
+        const alarmedPrey = new Set();  // Phase 12: Track prey that have already emitted alarm
 
         for (const hunter of hunters) {
             for (const preyCreature of prey) {
@@ -1241,11 +1568,22 @@ class CreatureTracker {
                     preyCreature.memory.recordDanger(hunter.x, hunter.y, size, intensity);
                 }
 
+                // Phase 12: Prey emit alarm signal when hunter is nearby (within 1.5x catch radius)
+                const alarmRadius = catchRadius * 1.5;
+                if (dist < alarmRadius && !alarmedPrey.has(preyCreature.id) && !eaten.has(preyCreature.id)) {
+                    const alarmIntensity = 0.8 * (1 - dist / alarmRadius);
+                    this.emitSignal('alarm', preyCreature.x, preyCreature.y, alarmIntensity, preyCreature);
+                    alarmedPrey.add(preyCreature.id);
+                }
+
                 if (dist < catchRadius) {
                     // Predation! Hunter eats prey
                     hunter.energy += preyCreature.mass * this.evolution.predationEnergy;
                     eaten.add(preyCreature.id);
                     this.stats.predationEvents++;
+
+                    // Phase 12: Hunter emits hunting signal on successful catch
+                    this.emitSignal('hunting', hunter.x, hunter.y, 1.0, hunter);
 
                     // Remove prey mass from the grid
                     for (const cell of preyCreature.cells) {

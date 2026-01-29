@@ -25,6 +25,18 @@ A browser-based interactive simulator for [Lenia](https://chakazul.github.io/len
 - **Hydrogeminium** - Fluid, water-like behavior
 - **Scutium Gravidus** - Dense shield-like structure
 
+### Flow-Lenia Species (Mass-Conservative)
+- **Swimmer** - Streamlined shape with directional movement
+- **Amoeba** - Extends pseudopods dynamically
+- **Vortex** - Rotating structure maintained by flow
+- **Droplet** - Cohesive spherical mass
+
+### Sensory Creatures (AI-Driven)
+- **Grazer** - Attracted to food, avoids crowding
+- **Schooler** - Forms groups, follows pheromone trails
+- **Hunter** - Predator that pursues prey
+- **Prey** - Flees from predators, moves erratically
+
 ### Multi-Channel Ecosystems
 Support for 2-4 interacting species with cross-channel dynamics:
 - **Predator & Prey** - Red hunters chase blue prey
@@ -37,6 +49,28 @@ Support for 2-4 interacting species with cross-channel dynamics:
 - **Parameter Explorer** - Grid search with stability heatmap
 - **Evolutionary Search** - Genetic algorithm to discover stable creatures
 - **Creature Gallery** - Save and load discoveries (localStorage)
+
+### Evolution & Genetics
+- Creatures have genomes controlling behavior and morphology
+- Reproduction with mutation when energy threshold reached
+- Natural selection through predation and resource competition
+- Track trait averages across generations
+
+### Memory & Learning (Phase 11)
+- Creatures remember food and danger locations
+- Spatial memory influences movement decisions
+- Memory inherited by offspring (cultural transmission)
+
+### Bioluminescent Signaling (Phase 12)
+- **Alarm signals** - Prey warn others of predators
+- **Hunting signals** - Predators coordinate on kills
+- **Mating signals** - Attract mates when fertile
+- **Territory signals** - Mark defended areas
+
+### Collective Behaviors (Phase 13)
+- **Schooling/Flocking** - Prey align headings like bird murmurations
+- **Pack Hunting** - Predators flank prey from multiple angles
+- **Homing/Territory** - Creatures return to and defend birthplace
 
 ### Recording & Export
 - WebM video recording
@@ -80,12 +114,16 @@ The parameters μ (growth center) and σ (growth width) control what neighborhoo
 
 - `index.html` - Main page and UI structure
 - `lenia.js` - Core simulation and p5.js rendering
+- `flow-lenia.js` - Mass-conservative Flow-Lenia dynamics
 - `kernels.js` - Kernel generation functions
 - `species.js` - Species presets and patterns
+- `creatures.js` - Creature detection, tracking, genomes, evolution, memory
+- `environment.js` - Food, pheromones, signals, environmental factors
 - `multi-channel.js` - Multi-channel simulation and ecosystems
 - `explorer.js` - Parameter exploration and evolution
 - `recorder.js` - Video and GIF recording
 - `ui.js` - UI controls and interactions
+- `ARCHITECTURE.md` - Detailed system architecture documentation
 
 ## Credits
 

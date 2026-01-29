@@ -18,11 +18,27 @@ class Environment {
         this.food = new Float32Array(size * size);
         this.pheromone = new Float32Array(size * size);
 
+        // Phase 12: Visual signal channels (bioluminescence)
+        this.alarmSignal = new Float32Array(size * size);      // Red/orange - prey danger warning
+        this.huntingSignal = new Float32Array(size * size);    // Magenta - hunter activity
+        this.matingSignal = new Float32Array(size * size);     // Cyan/blue - reproduction readiness
+        this.territorySignal = new Float32Array(size * size);  // Green - territorial marking
+
         // Working buffers for gradient computation
         this.foodGradX = new Float32Array(size * size);
         this.foodGradY = new Float32Array(size * size);
         this.pheromoneGradX = new Float32Array(size * size);
         this.pheromoneGradY = new Float32Array(size * size);
+
+        // Phase 12: Signal gradient buffers
+        this.alarmGradX = new Float32Array(size * size);
+        this.alarmGradY = new Float32Array(size * size);
+        this.huntingGradX = new Float32Array(size * size);
+        this.huntingGradY = new Float32Array(size * size);
+        this.matingGradX = new Float32Array(size * size);
+        this.matingGradY = new Float32Array(size * size);
+        this.territoryGradX = new Float32Array(size * size);
+        this.territoryGradY = new Float32Array(size * size);
 
         // Global current (wind/water flow)
         this.current = { x: 0, y: 0 };
@@ -45,7 +61,12 @@ class Environment {
             currentStrength: 0.0,      // Strength of global current (0-1)
             currentAngle: 0,           // Direction in radians
             currentOscillate: false,   // Whether current oscillates
-            currentOscillationSpeed: 0.01
+            currentOscillationSpeed: 0.01,
+
+            // Phase 12: Signal parameters (bioluminescence)
+            signalDecayRate: 0.08,     // Faster decay than pheromones
+            signalDiffusionRate: 0.3,  // Faster spread than pheromones
+            signalMaxDensity: 1.0      // Maximum signal intensity
         };
 
         // For oscillating current
@@ -146,6 +167,7 @@ class Environment {
     update(creatureMass = null) {
         this.updateFood(creatureMass);
         this.updatePheromones(creatureMass);
+        this.updateSignals();  // Phase 12: Update bioluminescent signals
         this.updateCurrent();
         this.computeGradients();
     }
@@ -232,6 +254,161 @@ class Environment {
     }
 
     /**
+     * Phase 12: Update all signal fields - decay and diffusion
+     * Signals spread faster but fade faster than pheromones
+     */
+    updateSignals() {
+        const { signalDecayRate, signalDiffusionRate, signalMaxDensity } = this.params;
+
+        this.updateSignalField(this.alarmSignal, signalDecayRate, signalDiffusionRate, signalMaxDensity);
+        this.updateSignalField(this.huntingSignal, signalDecayRate, signalDiffusionRate, signalMaxDensity);
+        this.updateSignalField(this.matingSignal, signalDecayRate, signalDiffusionRate, signalMaxDensity);
+        this.updateSignalField(this.territorySignal, signalDecayRate * 0.5, signalDiffusionRate * 0.3, signalMaxDensity); // Territory persists longer
+    }
+
+    /**
+     * Phase 12: Update a single signal field with decay and diffusion
+     */
+    updateSignalField(field, decayRate, diffusionRate, maxDensity) {
+        const size = this.size;
+        const newField = new Float32Array(field.length);
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const idx = y * size + x;
+                let value = field[idx];
+
+                // Decay
+                value *= (1 - decayRate);
+
+                // Diffusion (average with neighbors) - creates expanding ring effect
+                if (diffusionRate > 0) {
+                    const xm = (x - 1 + size) % size;
+                    const xp = (x + 1) % size;
+                    const ym = (y - 1 + size) % size;
+                    const yp = (y + 1) % size;
+
+                    const neighbors = (
+                        field[y * size + xm] +
+                        field[y * size + xp] +
+                        field[ym * size + x] +
+                        field[yp * size + x]
+                    ) / 4;
+
+                    value = value * (1 - diffusionRate) + neighbors * diffusionRate;
+                }
+
+                newField[idx] = Math.min(maxDensity, Math.max(0, value));
+            }
+        }
+
+        // Copy back
+        field.set(newField);
+    }
+
+    /**
+     * Phase 12: Emit a signal at a position (creates expanding pulse)
+     * @param {string} type - 'alarm', 'hunting', 'mating', 'territory'
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     * @param {number} intensity - Signal strength (0-1)
+     * @param {number} radius - Emission radius
+     */
+    emitSignal(type, x, y, intensity = 0.8, radius = 8) {
+        let field;
+        switch (type) {
+            case 'alarm':
+                field = this.alarmSignal;
+                break;
+            case 'hunting':
+                field = this.huntingSignal;
+                break;
+            case 'mating':
+                field = this.matingSignal;
+                break;
+            case 'territory':
+                field = this.territorySignal;
+                break;
+            default:
+                return;
+        }
+
+        // Emit signal in a circular area
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                const dist = Math.sqrt(dx * dx + dy * dy) / radius;
+                if (dist <= 1) {
+                    const ix = ((Math.floor(x + dx) % this.size) + this.size) % this.size;
+                    const iy = ((Math.floor(y + dy) % this.size) + this.size) % this.size;
+                    const value = intensity * (1 - dist * dist);  // Smooth falloff
+                    field[iy * this.size + ix] = Math.min(
+                        this.params.signalMaxDensity,
+                        field[iy * this.size + ix] + value
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Phase 12: Get signal gradient at a position
+     * @param {string} type - Signal type
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     * @returns {Object} - Gradient {x, y}
+     */
+    getSignalGradient(type, x, y) {
+        let gradX, gradY;
+        switch (type) {
+            case 'alarm':
+                gradX = this.alarmGradX;
+                gradY = this.alarmGradY;
+                break;
+            case 'hunting':
+                gradX = this.huntingGradX;
+                gradY = this.huntingGradY;
+                break;
+            case 'mating':
+                gradX = this.matingGradX;
+                gradY = this.matingGradY;
+                break;
+            case 'territory':
+                gradX = this.territoryGradX;
+                gradY = this.territoryGradY;
+                break;
+            default:
+                return { x: 0, y: 0 };
+        }
+        return this.sampleGradient(x, y, gradX, gradY);
+    }
+
+    /**
+     * Phase 12: Get signal value at a position
+     */
+    getSignalAt(type, x, y) {
+        let field;
+        switch (type) {
+            case 'alarm':
+                field = this.alarmSignal;
+                break;
+            case 'hunting':
+                field = this.huntingSignal;
+                break;
+            case 'mating':
+                field = this.matingSignal;
+                break;
+            case 'territory':
+                field = this.territorySignal;
+                break;
+            default:
+                return 0;
+        }
+        const ix = ((Math.floor(x) % this.size) + this.size) % this.size;
+        const iy = ((Math.floor(y) % this.size) + this.size) % this.size;
+        return field[iy * this.size + ix];
+    }
+
+    /**
      * Update global current (oscillation)
      */
     updateCurrent() {
@@ -252,6 +429,12 @@ class Environment {
     computeGradients() {
         this.computeFieldGradient(this.food, this.foodGradX, this.foodGradY);
         this.computeFieldGradient(this.pheromone, this.pheromoneGradX, this.pheromoneGradY);
+
+        // Phase 12: Compute signal gradients
+        this.computeFieldGradient(this.alarmSignal, this.alarmGradX, this.alarmGradY);
+        this.computeFieldGradient(this.huntingSignal, this.huntingGradX, this.huntingGradY);
+        this.computeFieldGradient(this.matingSignal, this.matingGradX, this.matingGradY);
+        this.computeFieldGradient(this.territorySignal, this.territoryGradX, this.territoryGradY);
     }
 
     /**
@@ -407,6 +590,20 @@ class Environment {
         this.foodGradY.fill(0);
         this.pheromoneGradX.fill(0);
         this.pheromoneGradY.fill(0);
+
+        // Phase 12: Clear signal fields
+        this.alarmSignal.fill(0);
+        this.huntingSignal.fill(0);
+        this.matingSignal.fill(0);
+        this.territorySignal.fill(0);
+        this.alarmGradX.fill(0);
+        this.alarmGradY.fill(0);
+        this.huntingGradX.fill(0);
+        this.huntingGradY.fill(0);
+        this.matingGradX.fill(0);
+        this.matingGradY.fill(0);
+        this.territoryGradX.fill(0);
+        this.territoryGradY.fill(0);
     }
 
     /**
@@ -415,6 +612,13 @@ class Environment {
     reset() {
         this.pheromone.fill(0);
         this.currentPhase = 0;
+
+        // Phase 12: Clear signals on reset
+        this.alarmSignal.fill(0);
+        this.huntingSignal.fill(0);
+        this.matingSignal.fill(0);
+        this.territorySignal.fill(0);
+
         this.initializeFood();
     }
 
@@ -431,6 +635,20 @@ class Environment {
         this.foodGradY = new Float32Array(newSize * newSize);
         this.pheromoneGradX = new Float32Array(newSize * newSize);
         this.pheromoneGradY = new Float32Array(newSize * newSize);
+
+        // Phase 12: Resize signal fields
+        this.alarmSignal = new Float32Array(newSize * newSize);
+        this.huntingSignal = new Float32Array(newSize * newSize);
+        this.matingSignal = new Float32Array(newSize * newSize);
+        this.territorySignal = new Float32Array(newSize * newSize);
+        this.alarmGradX = new Float32Array(newSize * newSize);
+        this.alarmGradY = new Float32Array(newSize * newSize);
+        this.huntingGradX = new Float32Array(newSize * newSize);
+        this.huntingGradY = new Float32Array(newSize * newSize);
+        this.matingGradX = new Float32Array(newSize * newSize);
+        this.matingGradY = new Float32Array(newSize * newSize);
+        this.territoryGradX = new Float32Array(newSize * newSize);
+        this.territoryGradY = new Float32Array(newSize * newSize);
 
         this.initializeFood();
     }

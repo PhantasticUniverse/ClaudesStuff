@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lenia Explorer - Phase 10: Predator-Prey Ecosystem</title>
+    <title>Lenia Explorer - Phase 13: Emergent Collective Behaviors</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
     <style>
@@ -386,7 +386,7 @@
         <div id="canvas-container"></div>
         <div id="controls">
             <h1>LENIA EXPLORER</h1>
-            <p class="subtitle">Phase 10 - Predator-Prey Ecosystem</p>
+            <p class="subtitle">Phase 13 - Emergent Collective Behaviors</p>
 
             <!-- Mode Tabs -->
             <div class="mode-tabs">
@@ -520,10 +520,26 @@
                         <button id="btn-show-pheromone">Trails</button>
                         <button id="btn-show-headings">Headings</button>
                         <button id="btn-show-sensors">Sensors</button>
+                        <button id="btn-show-flocking">Flock Links</button>
                     </div>
                     <div class="stats" style="margin-top: 10px;">
                         <div>Creatures: <span id="stat-creatures">0</span></div>
                         <div>Food: <span id="stat-food">0</span></div>
+                    </div>
+                </div>
+
+                <!-- Phase 12: Signal Visualization -->
+                <div class="section" id="signal-section" style="display: none;">
+                    <div class="section-title">Bioluminescent Signals</div>
+                    <div class="button-row">
+                        <button id="btn-show-alarm" style="color: #ff6432;">Alarm</button>
+                        <button id="btn-show-hunting" style="color: #ff32c8;">Hunting</button>
+                        <button id="btn-show-mating" style="color: #32c8ff;">Mating</button>
+                        <button id="btn-show-territory" style="color: #32ff64;">Territory</button>
+                    </div>
+                    <div class="button-row" style="margin-top: 8px;">
+                        <button id="btn-show-all-signals">All Signals</button>
+                        <button id="btn-hide-all-signals">Hide All</button>
                     </div>
                 </div>
 
@@ -590,6 +606,12 @@
                         <div>Avg Bias: <span id="stat-trait-kernel-bias">0.0</span></div>
                         <div>Avg Focus: <span id="stat-trait-sensor-focus">0.0</span></div>
                         <div>Memory: <span id="stat-trait-memory-weight">0.0</span></div>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 0.75em; color: #8ff;">
+                        <strong>Collective Behavior:</strong>
+                        <div>Alignment: <span id="stat-trait-alignment">0.0</span></div>
+                        <div>Pack Coord: <span id="stat-trait-pack-coord">0.0</span></div>
+                        <div>Homing: <span id="stat-trait-homing">0.0</span></div>
                     </div>
                 </div>
             </div>
