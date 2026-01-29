@@ -171,6 +171,12 @@ class Genome {
         this.packCoordination = defaults.packCoordination ?? 0.4;     // Flanking vs direct chase for hunters (0-1)
         this.territoryRadius = defaults.territoryRadius ?? 40;        // Home territory size in pixels
         this.homingStrength = defaults.homingStrength ?? 0.2;         // Attraction to birthplace (0-1)
+
+        // Phase 14: Migration behavior parameters
+        // These control how creatures respond to seasonal changes and moving food zones
+        this.migrationSensitivity = defaults.migrationSensitivity ?? 0.5;  // Follow strong food gradients (0-1)
+        this.wanderlust = defaults.wanderlust ?? 0.3;                      // Explore when food is scarce (0-1)
+        this.seasonalAdaptation = defaults.seasonalAdaptation ?? 0.3;      // Anticipate seasonal changes (0-1)
     }
 
     /**
@@ -260,6 +266,14 @@ class Genome {
         // Homing strength - attraction to birthplace
         child.homingStrength = mutate(child.homingStrength, 0, 0.5);
 
+        // Phase 14: Mutate migration behavior parameters
+        // Migration sensitivity - follow strong food gradients
+        child.migrationSensitivity = mutate(child.migrationSensitivity, 0, 1.0);
+        // Wanderlust - explore when hungry
+        child.wanderlust = mutate(child.wanderlust, 0, 1.0);
+        // Seasonal adaptation - anticipate changes
+        child.seasonalAdaptation = mutate(child.seasonalAdaptation, 0, 1.0);
+
         // Small chance to flip predator status
         if (Math.random() < mutationRate * 0.1) {
             child.isPredator = !child.isPredator;
@@ -308,7 +322,11 @@ class Genome {
             flockingRadius: this.flockingRadius,
             packCoordination: this.packCoordination,
             territoryRadius: this.territoryRadius,
-            homingStrength: this.homingStrength
+            homingStrength: this.homingStrength,
+            // Phase 14: Migration behavior parameters
+            migrationSensitivity: this.migrationSensitivity,
+            wanderlust: this.wanderlust,
+            seasonalAdaptation: this.seasonalAdaptation
         });
     }
 
@@ -348,7 +366,11 @@ class Genome {
             flockingRadius: sensory.flockingRadius ?? 30,
             packCoordination: sensory.packCoordination ?? 0.4,
             territoryRadius: sensory.territoryRadius ?? 40,
-            homingStrength: sensory.homingStrength ?? 0.2
+            homingStrength: sensory.homingStrength ?? 0.2,
+            // Phase 14: Migration behavior defaults
+            migrationSensitivity: sensory.migrationSensitivity ?? 0.5,
+            wanderlust: sensory.wanderlust ?? 0.3,
+            seasonalAdaptation: sensory.seasonalAdaptation ?? 0.3
         });
     }
 }
@@ -821,16 +843,56 @@ class CreatureTracker {
         }
 
         // Phase 13: Homing behavior - attraction to birthplace when outside territory
+        // Phase 14: Homing is reduced when wanderlust is high and food is scarce
         if (genome && genome.homingStrength > 0 && creature.homeX !== null) {
             const homeDistX = this.toroidalDelta(creature.homeX, creature.x, this.size);
             const homeDistY = this.toroidalDelta(creature.homeY, creature.y, this.size);
             const homeDist = Math.sqrt(homeDistX * homeDistX + homeDistY * homeDistY);
 
             if (homeDist > genome.territoryRadius && homeDist > 1) {
-                // Outside territory - gentle pull home
-                const homeForce = genome.homingStrength * 0.5;
+                // Phase 14: Calculate food scarcity factor - reduces homing when food is low
+                let homingReduction = 1.0;
+                if (environment && genome.wanderlust > 0) {
+                    const localFood = environment.getFoodAt(creature.x, creature.y);
+                    // When food is scarce (< 0.3) and wanderlust is high, reduce homing
+                    const scarcityFactor = Math.max(0, 1 - localFood / 0.3);
+                    homingReduction = 1 - (scarcityFactor * genome.wanderlust * 0.8);
+                }
+
+                // Outside territory - gentle pull home (reduced by wanderlust when hungry)
+                const homeForce = genome.homingStrength * 0.5 * homingReduction;
                 senseX += (homeDistX / homeDist) * homeForce * 10;
                 senseY += (homeDistY / homeDist) * homeForce * 10;
+            }
+        }
+
+        // Phase 14: Migration behavior - boost food gradient following and add exploration
+        if (genome && environment) {
+            // Migration sensitivity: amplify following of strong food gradients
+            if (genome.migrationSensitivity > 0) {
+                const foodGrad = environment.getFoodGradient(creature.x, creature.y);
+                const gradMag = Math.sqrt(foodGrad.x * foodGrad.x + foodGrad.y * foodGrad.y);
+
+                // Strong gradients (> 0.05) get amplified based on migrationSensitivity
+                if (gradMag > 0.05) {
+                    const amplification = genome.migrationSensitivity * 2;
+                    senseX += foodGrad.x * amplification * 10;
+                    senseY += foodGrad.y * amplification * 10;
+                }
+            }
+
+            // Wanderlust: add random exploration when food is scarce
+            if (genome.wanderlust > 0) {
+                const localFood = environment.getFoodAt(creature.x, creature.y);
+                // When food is below threshold, add random exploration component
+                if (localFood < 0.3) {
+                    const scarcity = 1 - (localFood / 0.3);  // 0 when food=0.3, 1 when food=0
+                    const exploreStrength = genome.wanderlust * scarcity * 5;
+                    // Use creature ID for consistent random direction (pseudo-random walk)
+                    const exploreAngle = (creature.id * 137.5 + creature.age * 0.1) % (Math.PI * 2);
+                    senseX += Math.cos(exploreAngle) * exploreStrength;
+                    senseY += Math.sin(exploreAngle) * exploreStrength;
+                }
             }
         }
 
@@ -1377,7 +1439,11 @@ class CreatureTracker {
             // Phase 13: Collective behavior traits
             alignmentWeight: 0,
             packCoordination: 0,
-            homingStrength: 0
+            homingStrength: 0,
+            // Phase 14: Migration behavior traits
+            migrationSensitivity: 0,
+            wanderlust: 0,
+            seasonalAdaptation: 0
         };
 
         for (const creature of this.creatures) {
@@ -1404,6 +1470,10 @@ class CreatureTracker {
                 traits.alignmentWeight += creature.genome.alignmentWeight;
                 traits.packCoordination += creature.genome.packCoordination;
                 traits.homingStrength += creature.genome.homingStrength;
+                // Phase 14: Migration behavior traits
+                traits.migrationSensitivity += creature.genome.migrationSensitivity;
+                traits.wanderlust += creature.genome.wanderlust;
+                traits.seasonalAdaptation += creature.genome.seasonalAdaptation;
             }
         }
 

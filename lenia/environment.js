@@ -66,11 +66,34 @@ class Environment {
             // Phase 12: Signal parameters (bioluminescence)
             signalDecayRate: 0.08,     // Faster decay than pheromones
             signalDiffusionRate: 0.3,  // Faster spread than pheromones
-            signalMaxDensity: 1.0      // Maximum signal intensity
+            signalMaxDensity: 1.0,     // Maximum signal intensity
+
+            // Phase 14: Seasonal cycle parameters
+            seasonalCycleEnabled: false,
+            seasonSpeed: 0.002,        // 0.001-0.01 (controls how fast seasons change)
+            seasonalAmplitude: 0.8,    // 0-1 (how much food rate varies)
+
+            // Phase 14: Moving food zones parameters
+            movingZonesEnabled: false,
+            zoneMovementSpeed: 0.3,    // 0.1-1.0 (how fast zones move)
+            zoneMovementPattern: 'circular',  // 'circular', 'linear', 'random'
+            numMigrationZones: 3,      // 1-6 zones
+            zoneRadius: 30,            // Radius of each zone
+            zoneFoodMultiplier: 5.0    // How much more food spawns at zone centers
         };
 
         // For oscillating current
         this.currentPhase = 0;
+
+        // Phase 14: Seasonal cycle state
+        this.seasonPhase = 0;         // 0-2π representing full year cycle
+        this.baseFoodSpawnRate = this.params.foodSpawnRate;  // Store base rate
+
+        // Phase 14: Migration zones
+        this.migrationZones = [];
+
+        // Phase 14: Migration trails (for visualization)
+        this.migrationTrails = new Float32Array(size * size);
 
         // Food cluster positions (for 'clusters' mode)
         this.foodClusters = [];
@@ -165,11 +188,32 @@ class Environment {
      * Update environment (called each simulation step)
      */
     update(creatureMass = null) {
+        // Phase 14: Update seasonal cycle before food update
+        if (this.params.seasonalCycleEnabled) {
+            this.updateSeasonalCycle();
+        }
+
+        // Phase 14: Update migration zones
+        if (this.params.movingZonesEnabled) {
+            this.updateMigrationZones();
+        }
+
         this.updateFood(creatureMass);
+
+        // Phase 14: Apply concentrated food at zone centers
+        if (this.params.movingZonesEnabled) {
+            this.applyMigrationZoneFood();
+        }
+
         this.updatePheromones(creatureMass);
         this.updateSignals();  // Phase 12: Update bioluminescent signals
         this.updateCurrent();
         this.computeGradients();
+
+        // Phase 14: Update migration trails
+        if (creatureMass) {
+            this.updateMigrationTrails(creatureMass);
+        }
     }
 
     /**
@@ -423,6 +467,188 @@ class Environment {
         }
     }
 
+    // ==================== Phase 14: Seasonal Cycles ====================
+
+    /**
+     * Phase 14: Update seasonal cycle - modulates food spawn rate sinusoidally
+     * Spring/Summer = high food, Fall/Winter = low food
+     */
+    updateSeasonalCycle() {
+        this.seasonPhase += this.params.seasonSpeed;
+        if (this.seasonPhase > Math.PI * 2) {
+            this.seasonPhase -= Math.PI * 2;
+        }
+
+        // Sinusoidal modulation: ranges from (1-amplitude) to (1+amplitude)
+        // Peak at phase=0 (spring), trough at phase=π (fall)
+        const seasonFactor = 1 + this.params.seasonalAmplitude * Math.cos(this.seasonPhase);
+
+        // Modulate food spawn rate (clamp to reasonable bounds)
+        this.params.foodSpawnRate = Math.max(0.0005, this.baseFoodSpawnRate * seasonFactor);
+    }
+
+    /**
+     * Phase 14: Get current season name based on phase
+     * @returns {string} - 'Spring', 'Summer', 'Fall', or 'Winter'
+     */
+    getSeasonName() {
+        const phase = this.seasonPhase;
+        // Spring: 0 to π/2, Summer: π/2 to π, Fall: π to 3π/2, Winter: 3π/2 to 2π
+        if (phase < Math.PI / 2) return 'Spring';
+        if (phase < Math.PI) return 'Summer';
+        if (phase < Math.PI * 1.5) return 'Fall';
+        return 'Winter';
+    }
+
+    /**
+     * Phase 14: Get seasonal multiplier (0-1 scale for UI display)
+     */
+    getSeasonalFoodMultiplier() {
+        return 1 + this.params.seasonalAmplitude * Math.cos(this.seasonPhase);
+    }
+
+    // ==================== Phase 14: Moving Food Zones ====================
+
+    /**
+     * Phase 14: Initialize migration zones at random positions
+     */
+    initializeMigrationZones() {
+        this.migrationZones = [];
+        const numZones = this.params.numMigrationZones;
+
+        for (let i = 0; i < numZones; i++) {
+            const zone = {
+                x: Math.random() * this.size,
+                y: Math.random() * this.size,
+                // For circular orbit pattern
+                orbitCenterX: this.size / 2,
+                orbitCenterY: this.size / 2,
+                orbitRadius: 30 + Math.random() * 60,
+                orbitPhase: (i / numZones) * Math.PI * 2,  // Evenly distributed around orbit
+                orbitSpeed: 0.5 + Math.random() * 0.5,     // Slight variation in speed
+                // For linear drift pattern
+                driftAngle: Math.random() * Math.PI * 2,
+                // For random walk pattern
+                wanderAngle: Math.random() * Math.PI * 2
+            };
+            this.migrationZones.push(zone);
+        }
+    }
+
+    /**
+     * Phase 14: Update migration zone positions based on movement pattern
+     */
+    updateMigrationZones() {
+        const speed = this.params.zoneMovementSpeed;
+        const pattern = this.params.zoneMovementPattern;
+
+        // Initialize zones if needed
+        if (this.migrationZones.length !== this.params.numMigrationZones) {
+            this.initializeMigrationZones();
+        }
+
+        for (const zone of this.migrationZones) {
+            switch (pattern) {
+                case 'circular':
+                    // Orbit around center
+                    zone.orbitPhase += speed * 0.02 * zone.orbitSpeed;
+                    zone.x = zone.orbitCenterX + Math.cos(zone.orbitPhase) * zone.orbitRadius;
+                    zone.y = zone.orbitCenterY + Math.sin(zone.orbitPhase) * zone.orbitRadius;
+                    break;
+
+                case 'linear':
+                    // Drift in a straight line (with toroidal wrapping)
+                    zone.x += Math.cos(zone.driftAngle) * speed;
+                    zone.y += Math.sin(zone.driftAngle) * speed;
+                    // Wrap around
+                    zone.x = ((zone.x % this.size) + this.size) % this.size;
+                    zone.y = ((zone.y % this.size) + this.size) % this.size;
+                    break;
+
+                case 'random':
+                    // Random walk with some persistence
+                    zone.wanderAngle += (Math.random() - 0.5) * 0.3;
+                    zone.x += Math.cos(zone.wanderAngle) * speed;
+                    zone.y += Math.sin(zone.wanderAngle) * speed;
+                    // Wrap around
+                    zone.x = ((zone.x % this.size) + this.size) % this.size;
+                    zone.y = ((zone.y % this.size) + this.size) % this.size;
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Phase 14: Apply concentrated food at migration zone centers
+     * Only processes cells within zone radius for performance
+     */
+    applyMigrationZoneFood() {
+        const radius = this.params.zoneRadius;
+        const multiplier = this.params.zoneFoodMultiplier;
+        const baseRate = this.params.foodSpawnRate;
+
+        for (const zone of this.migrationZones) {
+            const cx = Math.floor(zone.x);
+            const cy = Math.floor(zone.y);
+
+            // Only process cells within radius (performance optimization)
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > radius) continue;
+
+                    const x = ((cx + dx) % this.size + this.size) % this.size;
+                    const y = ((cy + dy) % this.size + this.size) % this.size;
+                    const idx = y * this.size + x;
+
+                    // Smooth falloff from center
+                    const t = dist / radius;
+                    const falloff = 1 - t * t;  // Quadratic falloff
+
+                    // Add extra food at zone
+                    const extraFood = baseRate * (multiplier - 1) * falloff;
+                    this.food[idx] = Math.min(this.params.foodMaxDensity, this.food[idx] + extraFood);
+                }
+            }
+        }
+    }
+
+    /**
+     * Phase 14: Get migration zones for visualization
+     */
+    getMigrationZones() {
+        return this.migrationZones;
+    }
+
+    // ==================== Phase 14: Migration Trails ====================
+
+    /**
+     * Phase 14: Update migration trails - decay existing and add new from creature positions
+     * @param {Float32Array} creatureMass - The creature mass field
+     */
+    updateMigrationTrails(creatureMass) {
+        const decayRate = 0.995;  // Slow decay for persistent trails
+
+        for (let i = 0; i < this.size * this.size; i++) {
+            // Decay existing trails
+            this.migrationTrails[i] *= decayRate;
+
+            // Add creature positions to trails
+            if (creatureMass[i] > 0.1) {
+                this.migrationTrails[i] = Math.min(1.0, this.migrationTrails[i] + creatureMass[i] * 0.02);
+            }
+        }
+    }
+
+    /**
+     * Phase 14: Get migration trail value at position
+     */
+    getMigrationTrailAt(x, y) {
+        const ix = ((Math.floor(x) % this.size) + this.size) % this.size;
+        const iy = ((Math.floor(y) % this.size) + this.size) % this.size;
+        return this.migrationTrails[iy * this.size + ix];
+    }
+
     /**
      * Compute gradients for all fields using Sobel filter
      */
@@ -619,6 +845,12 @@ class Environment {
         this.matingSignal.fill(0);
         this.territorySignal.fill(0);
 
+        // Phase 14: Reset seasonal and migration state
+        this.seasonPhase = 0;
+        this.baseFoodSpawnRate = this.params.foodSpawnRate;
+        this.migrationTrails.fill(0);
+        this.initializeMigrationZones();
+
         this.initializeFood();
     }
 
@@ -649,6 +881,10 @@ class Environment {
         this.matingGradY = new Float32Array(newSize * newSize);
         this.territoryGradX = new Float32Array(newSize * newSize);
         this.territoryGradY = new Float32Array(newSize * newSize);
+
+        // Phase 14: Resize migration trails
+        this.migrationTrails = new Float32Array(newSize * newSize);
+        this.initializeMigrationZones();
 
         this.initializeFood();
     }

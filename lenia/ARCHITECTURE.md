@@ -16,6 +16,7 @@ The simulation creates emergent behaviors including:
 - Predator-prey ecosystems with natural selection
 - Bioluminescent visual signaling (Phase 12)
 - Emergent collective behaviors: flocking, pack hunting, homing (Phase 13)
+- Migration patterns with seasonal cycles and moving food zones (Phase 14)
 
 ## File Structure
 
@@ -81,6 +82,11 @@ class Environment {
     matingSignal    // Cyan - reproduction readiness
     territorySignal // Green - territorial marking
 
+    // Phase 14: Migration systems
+    migrationZones      // Array of moving food hotspots
+    migrationTrails     // Float32Array tracking creature travel paths
+    seasonPhase         // Current position in seasonal cycle (0-2π)
+
     // Gradient buffers for each field
     foodGradX, foodGradY
     // ... etc
@@ -89,6 +95,14 @@ class Environment {
     update()            // Update all fields
     emitSignal(type, x, y, intensity)
     getSignalGradient(type, x, y)
+
+    // Phase 14: Seasonal & Migration
+    updateSeasonalCycle()       // Modulate food spawn rate sinusoidally
+    getSeasonName()             // Returns 'Spring', 'Summer', 'Fall', 'Winter'
+    initializeMigrationZones()  // Create zone objects
+    updateMigrationZones()      // Move zones (circular/linear/random)
+    applyMigrationZoneFood()    // Concentrate food at zone centers
+    updateMigrationTrails(mass) // Record creature positions, decay trails
 }
 ```
 
@@ -148,6 +162,11 @@ class Genome {
     packCoordination    // Flanking vs direct chase preference (0-1)
     territoryRadius     // Size of defended home area (0-80 pixels)
     homingStrength      // Pull toward birthplace (0-0.5)
+
+    // Migration (Phase 14)
+    migrationSensitivity // Amplifies following of strong food gradients (0-1)
+    wanderlust          // Exploration when food is scarce (0-1)
+    seasonalAdaptation  // Anticipate seasonal changes (0-1)
 
     // Methods
     mutate(rate)    // Create mutated offspring
@@ -401,6 +420,64 @@ if (genome.homingStrength > 0 && creature.homeX !== undefined) {
 ### Visualization: Flock Links
 
 The "Flock Links" overlay draws cyan lines between flocking neighbors. Alpha varies with distance: `40 + 120 * (1 - dist/flockRadius)`.
+
+## Migration Patterns (Phase 14)
+
+### Seasonal Cycles
+
+Food spawn rate oscillates sinusoidally to simulate seasons:
+
+```javascript
+// In environment.updateSeasonalCycle()
+this.seasonPhase += this.params.seasonSpeed;
+const seasonFactor = 1 + this.params.seasonalAmplitude * Math.cos(this.seasonPhase);
+this.params.foodSpawnRate = this.baseFoodSpawnRate * seasonFactor;
+```
+
+| Season | Phase Range | Food Multiplier |
+|--------|-------------|-----------------|
+| Spring | 0 to π/2 | High (peak at 0) |
+| Summer | π/2 to π | Declining |
+| Fall | π to 3π/2 | Low (trough at π) |
+| Winter | 3π/2 to 2π | Recovering |
+
+### Moving Food Zones
+
+3-6 hotspots that concentrate food and move across the world:
+
+| Pattern | Movement | Use Case |
+|---------|----------|----------|
+| Circular | Orbit around center | Predictable migration routes |
+| Linear | Straight drift with wrapping | Directional pressure |
+| Random | Random walk | Unpredictable resources |
+
+Zones apply extra food with smooth falloff: `extraFood = baseRate * (multiplier - 1) * (1 - (dist/radius)²)`
+
+### Migration Behavior
+
+Creatures respond to seasonal changes through genome parameters:
+
+```javascript
+// In computeSensoryInput()
+// 1. Amplify strong food gradients (migrationSensitivity)
+if (gradMag > 0.05) {
+    senseX += foodGrad.x * migrationSensitivity * 2 * 10;
+}
+
+// 2. Add exploration when hungry (wanderlust)
+if (localFood < 0.3) {
+    const scarcity = 1 - (localFood / 0.3);
+    senseX += cos(exploreAngle) * wanderlust * scarcity * 5;
+}
+
+// 3. Reduce homing when wanderlust high and food scarce
+homingReduction = 1 - (scarcityFactor * wanderlust * 0.8);
+```
+
+### Visualization
+
+- **Migration Trails**: Golden/amber overlay showing where creatures traveled
+- **Zone Centers**: Bright pulsing dots with glow effect at zone positions
 
 ## Performance Notes
 

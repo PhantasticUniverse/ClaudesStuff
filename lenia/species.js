@@ -759,6 +759,105 @@ const Species = {
         })()
     },
 
+    // ==================== Phase 14: Migration Species ====================
+
+    /**
+     * Migrant - Nomadic creature optimized for seasonal migrations
+     * Follows moving food zones, weak homing, strong exploration
+     */
+    migrant: {
+        name: "Migrant",
+        description: "Nomadic creature that follows seasonal food patterns and migrates across the world.",
+        params: {
+            R: 11,
+            peaks: 1,
+            mu: 0.20,
+            sigma: 0.030,
+            dt: 0.12,
+            flowStrength: 1.2,
+            diffusion: 0.10,
+            isFlowSpecies: true,
+            isSensorySpecies: true,
+            kernelType: 'ring',
+            // Sensory parameters
+            sensory: {
+                foodWeight: 1.2,        // Good food tracking
+                pheromoneWeight: 0.6,   // Follow migration trails
+                socialWeight: 0.4,      // Mild group cohesion
+                turnRate: 0.2,          // Moderate turning
+                isPredator: false
+            },
+            // Environment settings
+            environment: {
+                foodSpawnRate: 0.002,
+                pheromoneDecayRate: 0.01,
+                pheromoneEmissionRate: 0.1
+            },
+            // Phase 14: Migration-optimized genome
+            genome: {
+                foodWeight: 1.2,
+                pheromoneWeight: 0.6,
+                socialWeight: 0.4,
+                turnRate: 0.2,
+                speedPreference: 1.2,
+                metabolismRate: 0.018,       // Efficient metabolism for long journeys
+                reproductionThreshold: 55,
+                reproductionCost: 0.55,
+                sizePreference: 1.0,
+                isPredator: false,
+                // Morphology: medium-sized, balanced
+                kernelRadius: 11,
+                growthMu: 0.18,
+                growthSigma: 0.025,
+                // Directional: mild forward bias for travel
+                kernelBias: 0.15,
+                kernelOrientation: 0,
+                // Sensing: forward-focused for spotting distant food
+                sensorAngle: 0,
+                sensorFocus: 0.3,
+                // Memory: strong food memory for returning to good spots
+                memoryWeight: 0.7,
+                memoryDecay: 0.997,          // Long-lasting memories
+                // Signal sensitivity
+                alarmSensitivity: 0.4,
+                huntingSensitivity: -0.1,
+                matingSensitivity: 0.5,
+                territorySensitivity: 0.1,
+                signalEmissionRate: 0.5,
+                // Collective behavior: nomadic, group migration
+                alignmentWeight: 0.5,        // Strong group alignment for herds
+                flockingRadius: 35,
+                packCoordination: 0.0,
+                territoryRadius: 20,         // Small territory (nomadic)
+                homingStrength: 0.05,        // Very weak homing (nomadic)
+                // Migration: optimized for following seasonal patterns
+                migrationSensitivity: 0.8,   // Strong gradient following
+                wanderlust: 0.7,             // High exploration when hungry
+                seasonalAdaptation: 0.6      // Anticipates changes
+            }
+        },
+        // Elongated shape for long-distance travel
+        pattern: (function() {
+            const width = 20;
+            const height = 14;
+            const pattern = [];
+            for (let y = 0; y < height; y++) {
+                const row = [];
+                for (let x = 0; x < width; x++) {
+                    const cx = width / 2 - 0.5;
+                    const cy = height / 2 - 0.5;
+                    const dx = (x - cx) / (width / 2.5);
+                    const dy = (y - cy) / (height / 2.5);
+                    const r = Math.sqrt(dx * dx + dy * dy);
+                    let value = r < 1 ? (1 - r * r) : 0;
+                    row.push(Math.max(0, value));
+                }
+                pattern.push(row);
+            }
+            return pattern;
+        })()
+    },
+
     /**
      * Place a species pattern onto the grid
      */

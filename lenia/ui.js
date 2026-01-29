@@ -33,6 +33,8 @@ let showPheromoneOverlay = false;
 let showHeadingsOverlay = false;
 let showSensorsOverlay = false;
 let showFlockingOverlay = false;  // Phase 13: Flock link visualization
+let showMigrationTrails = false;  // Phase 14: Migration trail visualization
+let showZoneCenters = false;      // Phase 14: Zone center visualization
 
 function initUI() {
     // Initialize multi-channel, flow-lenia, and explorer systems
@@ -208,6 +210,20 @@ function initUI() {
         btn.classList.toggle('primary', showFlockingOverlay);
     });
 
+    // Phase 14: Migration trail visualization toggle
+    document.getElementById('btn-show-migration-trails').addEventListener('click', () => {
+        showMigrationTrails = !showMigrationTrails;
+        const btn = document.getElementById('btn-show-migration-trails');
+        btn.classList.toggle('primary', showMigrationTrails);
+    });
+
+    // Phase 14: Zone centers visualization toggle
+    document.getElementById('btn-show-zones').addEventListener('click', () => {
+        showZoneCenters = !showZoneCenters;
+        const btn = document.getElementById('btn-show-zones');
+        btn.classList.toggle('primary', showZoneCenters);
+    });
+
     // Phase 12: Signal visualization toggles
     document.getElementById('btn-show-alarm').addEventListener('click', () => {
         showAlarmSignals = !showAlarmSignals;
@@ -253,6 +269,64 @@ function initUI() {
         document.getElementById('btn-show-hunting').classList.remove('primary');
         document.getElementById('btn-show-mating').classList.remove('primary');
         document.getElementById('btn-show-territory').classList.remove('primary');
+    });
+
+    // Phase 14: Seasonal cycle toggle
+    document.getElementById('btn-seasons-off').addEventListener('click', () => {
+        setSeasonalMode(false);
+    });
+
+    document.getElementById('btn-seasons-on').addEventListener('click', () => {
+        setSeasonalMode(true);
+    });
+
+    // Phase 14: Moving zones toggle
+    document.getElementById('btn-zones-off').addEventListener('click', () => {
+        setZonesMode(false);
+    });
+
+    document.getElementById('btn-zones-on').addEventListener('click', () => {
+        setZonesMode(true);
+    });
+
+    // Phase 14: Season speed slider
+    setupSlider('season-speed', (value) => {
+        if (environment) {
+            environment.params.seasonSpeed = parseFloat(value);
+        }
+    });
+
+    // Phase 14: Seasonal amplitude slider
+    setupSlider('seasonal-amplitude', (value) => {
+        if (environment) {
+            environment.params.seasonalAmplitude = parseFloat(value);
+        }
+    });
+
+    // Phase 14: Zone pattern select
+    const zonePatternSelect = document.getElementById('zone-pattern');
+    if (zonePatternSelect) {
+        zonePatternSelect.addEventListener('change', (e) => {
+            if (environment) {
+                environment.params.zoneMovementPattern = e.target.value;
+                environment.initializeMigrationZones();
+            }
+        });
+    }
+
+    // Phase 14: Zone speed slider
+    setupSlider('zone-speed', (value) => {
+        if (environment) {
+            environment.params.zoneMovementSpeed = parseFloat(value);
+        }
+    });
+
+    // Phase 14: Number of zones slider
+    setupSlider('num-zones', (value) => {
+        if (environment) {
+            environment.params.numMigrationZones = parseInt(value);
+            environment.initializeMigrationZones();
+        }
     });
 
     // Phase 5: Evolution mode toggle
@@ -922,6 +996,66 @@ function setEvolutionMode(enabled) {
 }
 
 /**
+ * Phase 14: Toggle seasonal cycle mode
+ */
+function setSeasonalMode(enabled) {
+    // Update button states
+    const btnOff = document.getElementById('btn-seasons-off');
+    const btnOn = document.getElementById('btn-seasons-on');
+    const seasonIndicator = document.getElementById('season-indicator');
+
+    if (enabled) {
+        btnOff.classList.remove('primary');
+        btnOn.classList.add('primary');
+        seasonIndicator.style.display = 'block';
+
+        if (environment) {
+            environment.params.seasonalCycleEnabled = true;
+            environment.baseFoodSpawnRate = environment.params.foodSpawnRate;
+        }
+    } else {
+        btnOff.classList.add('primary');
+        btnOn.classList.remove('primary');
+        seasonIndicator.style.display = 'none';
+
+        if (environment) {
+            environment.params.seasonalCycleEnabled = false;
+            // Restore base food spawn rate
+            environment.params.foodSpawnRate = environment.baseFoodSpawnRate;
+        }
+    }
+}
+
+/**
+ * Phase 14: Toggle moving food zones mode
+ */
+function setZonesMode(enabled) {
+    // Update button states
+    const btnOff = document.getElementById('btn-zones-off');
+    const btnOn = document.getElementById('btn-zones-on');
+    const zonesIndicator = document.getElementById('zones-indicator');
+
+    if (enabled) {
+        btnOff.classList.remove('primary');
+        btnOn.classList.add('primary');
+        zonesIndicator.style.display = 'block';
+
+        if (environment) {
+            environment.params.movingZonesEnabled = true;
+            environment.initializeMigrationZones();
+        }
+    } else {
+        btnOff.classList.add('primary');
+        btnOn.classList.remove('primary');
+        zonesIndicator.style.display = 'none';
+
+        if (environment) {
+            environment.params.movingZonesEnabled = false;
+        }
+    }
+}
+
+/**
  * Phase 4: Toggle sensory creature mode
  */
 function setSensoryMode(enabled) {
@@ -936,6 +1070,8 @@ function setSensoryMode(enabled) {
     const visualizationSection = document.getElementById('visualization-section');
     const evolutionSection = document.getElementById('evolution-section');
     const signalSection = document.getElementById('signal-section');  // Phase 12
+    const seasonalSection = document.getElementById('seasonal-section');  // Phase 14
+    const zonesSection = document.getElementById('zones-section');        // Phase 14
 
     if (enabled) {
         btnOff.classList.remove('primary');
@@ -946,6 +1082,8 @@ function setSensoryMode(enabled) {
         visualizationSection.style.display = 'block';
         evolutionSection.style.display = 'block';  // Show evolution controls
         if (signalSection) signalSection.style.display = 'block';  // Phase 12: Show signal controls
+        if (seasonalSection) seasonalSection.style.display = 'block';  // Phase 14: Show seasonal controls
+        if (zonesSection) zonesSection.style.display = 'block';        // Phase 14: Show zones controls
 
         // Enable sensory mode in flow lenia
         if (flowLenia) {
@@ -970,9 +1108,15 @@ function setSensoryMode(enabled) {
         visualizationSection.style.display = 'none';
         evolutionSection.style.display = 'none';  // Hide evolution controls
         if (signalSection) signalSection.style.display = 'none';  // Phase 12: Hide signal controls
+        if (seasonalSection) seasonalSection.style.display = 'none';  // Phase 14: Hide seasonal controls
+        if (zonesSection) zonesSection.style.display = 'none';        // Phase 14: Hide zones controls
 
         // Disable evolution when disabling sensory mode
         setEvolutionMode(false);
+
+        // Phase 14: Disable migration features when disabling sensory mode
+        setSeasonalMode(false);
+        setZonesMode(false);
 
         // Disable sensory mode in flow lenia
         if (flowLenia) {
@@ -1228,6 +1372,19 @@ function updateSensoryStats() {
         foodEl.textContent = totalFood.toFixed(1);
     }
 
+    // Phase 14: Update season indicator
+    if (environment && environment.params.seasonalCycleEnabled) {
+        const seasonNameEl = document.getElementById('season-name');
+        const seasonFoodRateEl = document.getElementById('season-food-rate');
+
+        if (seasonNameEl) {
+            seasonNameEl.textContent = environment.getSeasonName();
+        }
+        if (seasonFoodRateEl) {
+            seasonFoodRateEl.textContent = environment.params.foodSpawnRate.toFixed(4);
+        }
+    }
+
     // Update evolution stats if enabled
     if (evolutionEnabled && creatureTracker) {
         updateEvolutionStats();
@@ -1336,6 +1493,21 @@ function updateEvolutionStats() {
     }
     if (traitHomingEl && traits.homingStrength !== undefined) {
         traitHomingEl.textContent = traits.homingStrength.toFixed(3);
+    }
+
+    // Phase 14: Migration trait averages
+    const traitMigrationEl = document.getElementById('stat-trait-migration');
+    const traitWanderlustEl = document.getElementById('stat-trait-wanderlust');
+    const traitSeasonalEl = document.getElementById('stat-trait-seasonal');
+
+    if (traitMigrationEl && traits.migrationSensitivity !== undefined) {
+        traitMigrationEl.textContent = traits.migrationSensitivity.toFixed(3);
+    }
+    if (traitWanderlustEl && traits.wanderlust !== undefined) {
+        traitWanderlustEl.textContent = traits.wanderlust.toFixed(3);
+    }
+    if (traitSeasonalEl && traits.seasonalAdaptation !== undefined) {
+        traitSeasonalEl.textContent = traits.seasonalAdaptation.toFixed(3);
     }
 }
 

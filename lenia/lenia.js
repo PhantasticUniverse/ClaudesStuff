@@ -24,6 +24,9 @@ let showHuntingSignals = false;
 let showMatingSignals = false;
 let showTerritorySignals = false;
 
+// Phase 14: Migration visualization toggles (defined in ui.js, referenced here)
+// showMigrationTrails and showZoneCenters are in ui.js
+
 // Color maps
 const ColorMaps = {
     viridis: [
@@ -525,6 +528,17 @@ function draw() {
                         }
                     }
 
+                    // Phase 14: Migration trails - golden/amber overlay
+                    if (typeof showMigrationTrails !== 'undefined' && showMigrationTrails) {
+                        const trailVal = environment.migrationTrails[cellIdx];
+                        if (trailVal > 0.02) {
+                            const intensity = Math.min(1, trailVal * 3) * 0.6;
+                            r = Math.min(255, r + intensity * 255);
+                            g = Math.min(255, g + intensity * 180);
+                            b = Math.min(255, b + intensity * 50);
+                        }
+                    }
+
                     color = [Math.round(r), Math.round(g), Math.round(b)];
                 }
 
@@ -574,6 +588,14 @@ function draw() {
         typeof showFlockingOverlay !== 'undefined' && showFlockingOverlay &&
         typeof creatureTracker !== 'undefined' && creatureTracker) {
         drawFlockLinks();
+    }
+
+    // Phase 14: Draw migration zone centers
+    if (typeof sensoryEnabled !== 'undefined' && sensoryEnabled &&
+        typeof showZoneCenters !== 'undefined' && showZoneCenters &&
+        typeof environment !== 'undefined' && environment &&
+        environment.params.movingZonesEnabled) {
+        drawZoneCenters();
     }
 
     // Update stats
@@ -763,6 +785,47 @@ function drawFlockLinks() {
                 line(screenX, screenY, otherScreenX, otherScreenY);
             }
         }
+    }
+
+    pop();
+}
+
+/**
+ * Phase 14: Draw migration zone centers as bright pulsing indicators
+ */
+function drawZoneCenters() {
+    if (!environment || !environment.migrationZones) return;
+
+    const sim = flowLenia || lenia;
+    const cellSize = width / sim.size;
+    const zones = environment.getMigrationZones();
+
+    push();
+    noStroke();
+
+    for (const zone of zones) {
+        const screenX = zone.x * cellSize;
+        const screenY = zone.y * cellSize;
+
+        // Pulsing effect based on time
+        const pulse = 0.7 + 0.3 * Math.sin(millis() * 0.005);
+
+        // Outer glow (larger, more transparent)
+        const glowRadius = environment.params.zoneRadius * cellSize * 0.8;
+        fill(255, 220, 100, 30 * pulse);
+        ellipse(screenX, screenY, glowRadius * 2, glowRadius * 2);
+
+        // Middle ring
+        fill(255, 200, 50, 60 * pulse);
+        ellipse(screenX, screenY, glowRadius * 1.2, glowRadius * 1.2);
+
+        // Inner bright core
+        fill(255, 255, 150, 150 * pulse);
+        ellipse(screenX, screenY, 12, 12);
+
+        // Center point
+        fill(255, 255, 255);
+        ellipse(screenX, screenY, 4, 4);
     }
 
     pop();
