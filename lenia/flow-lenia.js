@@ -139,6 +139,18 @@ class FlowLenia {
     }
 
     /**
+     * Phase 6: Growth function with local morphology influence
+     * Blends global parameters with creature-specific parameters based on local density
+     * @param {number} u - Neighborhood potential value
+     * @param {number} localMu - Blended mu value for this location
+     * @param {number} localSigma - Blended sigma value for this location
+     */
+    growthWithMorphology(u, localMu, localSigma) {
+        const d = (u - localMu) / localSigma;
+        return 2 * Math.exp(-d * d / 2) - 1;
+    }
+
+    /**
      * Compute neighborhood potential via convolution
      * U = K * A (kernel convolved with activations)
      */
@@ -174,13 +186,100 @@ class FlowLenia {
     /**
      * Compute affinity map from potential using growth function
      * Affinity = G(U) - this tells us where mass "wants" to be
+     * Phase 6: Now includes morphology influence from creature genomes
      */
     computeAffinity() {
-        const { size, potential, affinity } = this;
+        const { size, potential, affinity, A } = this;
+
+        // Phase 6: Check if morphology evolution is active
+        const useMorphology = this.sensoryEnabled &&
+                              this.creatureTracker &&
+                              this.creatureTracker.evolution.enabled &&
+                              this.creatureTracker.creatures.length > 0;
+
+        if (!useMorphology) {
+            // Standard computation without morphology
+            for (let i = 0; i < size * size; i++) {
+                affinity[i] = this.growth(potential[i]);
+            }
+            return;
+        }
+
+        // Phase 6: Compute with local morphology influence
+        // Build a map of morphology influence at each cell
+        const morphInfluence = this.computeMorphologyInfluence();
 
         for (let i = 0; i < size * size; i++) {
-            affinity[i] = this.growth(potential[i]);
+            const influence = morphInfluence[i];
+
+            if (influence.weight > 0.01) {
+                // Blend global and local morphology based on influence weight
+                // Higher local mass = stronger creature influence
+                const blendFactor = Math.min(1, influence.weight * 2);
+                const localMu = this.mu * (1 - blendFactor) + influence.mu * blendFactor;
+                const localSigma = this.sigma * (1 - blendFactor) + influence.sigma * blendFactor;
+
+                affinity[i] = this.growthWithMorphology(potential[i], localMu, localSigma);
+            } else {
+                affinity[i] = this.growth(potential[i]);
+            }
         }
+    }
+
+    /**
+     * Phase 6: Compute local morphology influence from creatures
+     * Returns an array where each cell has { mu, sigma, weight }
+     * Weight indicates how strongly creatures influence that location
+     */
+    computeMorphologyInfluence() {
+        const { size, A, creatureTracker } = this;
+        const influence = new Array(size * size);
+
+        // Initialize with zeros
+        for (let i = 0; i < size * size; i++) {
+            influence[i] = { mu: this.mu, sigma: this.sigma, weight: 0 };
+        }
+
+        if (!creatureTracker) return influence;
+
+        // For each creature, spread its morphology influence
+        for (const creature of creatureTracker.creatures) {
+            if (!creature.genome) continue;
+
+            const genome = creature.genome;
+            const cx = Math.floor(creature.x);
+            const cy = Math.floor(creature.y);
+            const radius = Math.ceil(genome.kernelRadius * 1.5); // Influence extends beyond kernel
+
+            // Spread influence in a circle around creature center
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > radius) continue;
+
+                    // Toroidal wrapping
+                    const x = (cx + dx + size) % size;
+                    const y = (cy + dy + size) % size;
+                    const idx = y * size + x;
+
+                    // Weight based on distance and local mass
+                    const distFactor = 1 - dist / radius;
+                    const massFactor = A[idx];
+                    const weight = distFactor * distFactor * massFactor;
+
+                    if (weight > influence[idx].weight) {
+                        // Strongest creature influence wins (avoids averaging artifacts)
+                        influence[idx] = {
+                            mu: genome.growthMu,
+                            sigma: genome.growthSigma,
+                            weight: weight
+                        };
+                    }
+                }
+            }
+        }
+
+        return influence;
     }
 
     /**

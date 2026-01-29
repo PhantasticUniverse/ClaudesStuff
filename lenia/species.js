@@ -407,6 +407,7 @@ const Species = {
                 pheromoneEmissionRate: 0.05
             },
             // Phase 5: Evolution genome
+            // Phase 6: Added morphology parameters
             genome: {
                 foodWeight: 1.5,
                 pheromoneWeight: 0.3,
@@ -417,7 +418,11 @@ const Species = {
                 reproductionThreshold: 45,
                 reproductionCost: 0.55,
                 sizePreference: 1.0,
-                isPredator: false
+                isPredator: false,
+                // Morphology: medium-sized, balanced
+                kernelRadius: 10,
+                growthMu: 0.18,
+                growthSigma: 0.025
             }
         },
         // Compact circular blob
@@ -473,6 +478,7 @@ const Species = {
                 pheromoneEmissionRate: 0.15  // Stronger emissions
             },
             // Phase 5: Evolution genome
+            // Phase 6: Added morphology parameters
             genome: {
                 foodWeight: 0.3,
                 pheromoneWeight: 1.2,
@@ -483,7 +489,11 @@ const Species = {
                 reproductionThreshold: 50,
                 reproductionCost: 0.6,
                 sizePreference: 0.9,
-                isPredator: false
+                isPredator: false,
+                // Morphology: medium-sized, moderate cohesion
+                kernelRadius: 11,
+                growthMu: 0.20,
+                growthSigma: 0.022
             }
         },
         // Streamlined shape for schooling
@@ -544,6 +554,7 @@ const Species = {
                 pheromoneEmissionRate: 0.08
             },
             // Phase 5: Evolution genome
+            // Phase 6: Added morphology parameters
             genome: {
                 foodWeight: 0.0,
                 pheromoneWeight: 0.5,
@@ -554,7 +565,11 @@ const Species = {
                 reproductionThreshold: 60,
                 reproductionCost: 0.65,
                 sizePreference: 1.3,
-                isPredator: true
+                isPredator: true,
+                // Morphology: LARGE kernel radius for better prey detection
+                kernelRadius: 14,
+                growthMu: 0.24,
+                growthSigma: 0.028
             }
         },
         // Larger, more aggressive shape
@@ -614,6 +629,7 @@ const Species = {
                 pheromoneEmissionRate: 0.04  // Weak emissions to avoid detection
             },
             // Phase 5: Evolution genome
+            // Phase 6: Added morphology parameters
             genome: {
                 foodWeight: 0.8,
                 pheromoneWeight: -0.3,
@@ -624,7 +640,11 @@ const Species = {
                 reproductionThreshold: 35, // Reproduce quickly
                 reproductionCost: 0.5,
                 sizePreference: 0.7,     // Stay small
-                isPredator: false
+                isPredator: false,
+                // Morphology: SMALL kernel radius for faster, more agile movement
+                kernelRadius: 8,
+                growthMu: 0.16,
+                growthSigma: 0.03
             }
         },
         // Small, compact shape for speed

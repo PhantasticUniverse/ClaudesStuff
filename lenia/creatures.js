@@ -46,6 +46,12 @@ class Genome {
 
         // Behavioral traits
         this.isPredator = defaults.isPredator ?? false;
+
+        // Phase 6: Morphology parameters - kernel characteristics
+        // These define the creature's physical form and interaction radius
+        this.kernelRadius = defaults.kernelRadius ?? 10;    // R: creature size (8-15 range)
+        this.growthMu = defaults.growthMu ?? 0.15;          // μ: growth function center (0.1-0.3)
+        this.growthSigma = defaults.growthSigma ?? 0.02;    // σ: growth function width (0.01-0.05)
     }
 
     /**
@@ -79,6 +85,14 @@ class Genome {
         // Mutate physical
         child.sizePreference = mutate(child.sizePreference, 0.5, 2.0);
 
+        // Phase 6: Mutate morphology parameters
+        // Kernel radius affects creature size and sensing range
+        child.kernelRadius = mutate(child.kernelRadius, 8, 15);
+        // Growth mu affects what density the creature prefers
+        child.growthMu = mutate(child.growthMu, 0.1, 0.3);
+        // Growth sigma affects tolerance to density variations
+        child.growthSigma = mutate(child.growthSigma, 0.01, 0.05);
+
         // Small chance to flip predator status
         if (Math.random() < mutationRate * 0.1) {
             child.isPredator = !child.isPredator;
@@ -102,7 +116,11 @@ class Genome {
             reproductionThreshold: this.reproductionThreshold,
             reproductionCost: this.reproductionCost,
             sizePreference: this.sizePreference,
-            isPredator: this.isPredator
+            isPredator: this.isPredator,
+            // Phase 6: Morphology parameters
+            kernelRadius: this.kernelRadius,
+            growthMu: this.growthMu,
+            growthSigma: this.growthSigma
         });
     }
 
@@ -117,7 +135,11 @@ class Genome {
             pheromoneWeight: sensory.pheromoneWeight ?? 0.5,
             socialWeight: sensory.socialWeight ?? 0.3,
             turnRate: sensory.turnRate ?? 0.15,
-            isPredator: sensory.isPredator ?? false
+            isPredator: sensory.isPredator ?? false,
+            // Phase 6: Morphology defaults
+            kernelRadius: sensory.kernelRadius ?? 10,
+            growthMu: sensory.growthMu ?? 0.15,
+            growthSigma: sensory.growthSigma ?? 0.02
         });
     }
 }
@@ -855,7 +877,11 @@ class CreatureTracker {
             pheromoneWeight: 0,
             socialWeight: 0,
             turnRate: 0,
-            metabolismRate: 0
+            metabolismRate: 0,
+            // Phase 6: Morphology traits
+            kernelRadius: 0,
+            growthMu: 0,
+            growthSigma: 0
         };
 
         for (const creature of this.creatures) {
@@ -868,6 +894,10 @@ class CreatureTracker {
                 traits.socialWeight += creature.genome.socialWeight;
                 traits.turnRate += creature.genome.turnRate;
                 traits.metabolismRate += creature.genome.metabolismRate;
+                // Phase 6: Morphology traits
+                traits.kernelRadius += creature.genome.kernelRadius;
+                traits.growthMu += creature.genome.growthMu;
+                traits.growthSigma += creature.genome.growthSigma;
             }
         }
 

@@ -1178,6 +1178,21 @@ function updateEvolutionStats() {
     if (traitTurnEl && traits.turnRate !== undefined) {
         traitTurnEl.textContent = traits.turnRate.toFixed(3);
     }
+
+    // Phase 6: Morphology trait averages
+    const traitKernelREl = document.getElementById('stat-trait-kernel-r');
+    const traitGrowthMuEl = document.getElementById('stat-trait-growth-mu');
+    const traitGrowthSigmaEl = document.getElementById('stat-trait-growth-sigma');
+
+    if (traitKernelREl && traits.kernelRadius !== undefined) {
+        traitKernelREl.textContent = traits.kernelRadius.toFixed(1);
+    }
+    if (traitGrowthMuEl && traits.growthMu !== undefined) {
+        traitGrowthMuEl.textContent = traits.growthMu.toFixed(3);
+    }
+    if (traitGrowthSigmaEl && traits.growthSigma !== undefined) {
+        traitGrowthSigmaEl.textContent = traits.growthSigma.toFixed(4);
+    }
 }
 
 /**

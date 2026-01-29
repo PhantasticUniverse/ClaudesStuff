@@ -6,13 +6,14 @@ Creative coding experiments with Claude. Focus: artificial life, generative art,
 
 Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-### Status: Phase 5 Complete
+### Status: Phase 6 Complete
 
 1. Core Lenia with multiple kernel types
 2. Multi-channel ecosystems
 3. Flow-Lenia (mass-conservative)
 4. Sensory creatures & environments
-5. **Evolving creatures** - genome inheritance, energy system, reproduction
+5. Evolving creatures - genome inheritance, energy system, reproduction
+6. **Morphology evolution** - kernel parameters (R, μ, σ) are heritable traits
 
 ### Key Files
 
@@ -83,6 +84,8 @@ After any change, open the browser and verify:
 
 - [Lenia Paper](https://arxiv.org/abs/1812.05433) - Chan, 2018
 - [Flow-Lenia Paper](https://arxiv.org/abs/2212.07906) - Plantec et al., 2023
+- [Metamorphic Transitions in Lenia](https://link.springer.com/article/10.1007/s10015-025-01081-7) - 2025 (Phase 6 inspiration)
+- [Sensorimotor Lenia](https://developmentalsystems.org/sensorimotor-lenia/) - Evolutionary morphology
 - [Lenia Portal](https://chakazul.github.io/lenia.html)
 
 ---
@@ -110,3 +113,34 @@ Unlike discrete CA where creatures are separate entities, Flow-Lenia creatures c
 - "Deaths" often appear as merges, not starvation
 - Population tends toward fewer, larger creatures
 - Reproduction must create sufficient separation between offspring
+
+---
+
+## Reflections (Phase 6)
+
+### Morphology Evolution via Soft Influence
+
+Phase 6 adds heritable kernel parameters (kernelRadius, growthMu, growthSigma) to creature genomes. Rather than computing per-creature kernels (expensive), we use a "soft influence" approach:
+
+1. Each creature's morphology genome defines its preferred kernel parameters
+2. The affinity map computation blends global kernel params with local creature params
+3. Influence weight = creature density at that cell
+4. Stronger creatures (more mass) have more influence on local physics
+
+**Trade-off**: This is less accurate than true per-creature kernels but much simpler and computationally feasible.
+
+### Observing Morphology Drift
+
+Due to Flow-Lenia's merging behavior, morphology drift is subtle:
+- Creatures that merge combine their mass but lose distinct genomes
+- Populations tend to homogenize toward a single dominant morphology
+- To see more diversity, try species with negative social weight (avoid each other)
+
+### Species-Specific Morphology
+
+Different species now have distinct starting morphologies:
+- **Hunter**: Large R (14) for better prey detection
+- **Prey**: Small R (8) for faster, agile movement
+- **Grazer/Schooler**: Balanced medium R (10-11)
+
+This creates natural advantages: hunters sense prey from farther away, prey can maneuver more quickly.
