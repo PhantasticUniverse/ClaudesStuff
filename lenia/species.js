@@ -446,7 +446,9 @@ const Species = {
                 flockingRadius: 25,         // Small flock awareness
                 packCoordination: 0.0,      // Not a hunter
                 territoryRadius: 45,        // Larger grazing territory
-                homingStrength: 0.25        // Strong homing instinct
+                homingStrength: 0.25,       // Strong homing instinct
+                // Phase 16: Locomotion - slow foraging speed
+                locomotionSpeed: 0.8
             }
         },
         // Compact circular blob
@@ -540,7 +542,9 @@ const Species = {
                 flockingRadius: 35,         // Medium flock awareness
                 packCoordination: 0.0,      // Not a hunter
                 territoryRadius: 0,         // No territory (nomadic)
-                homingStrength: 0.0         // No homing instinct
+                homingStrength: 0.0,        // No homing instinct
+                // Phase 16: Locomotion - moderate group speed
+                locomotionSpeed: 1.0
             }
         },
         // Streamlined shape for schooling
@@ -640,7 +644,9 @@ const Species = {
                 flockingRadius: 0,          // N/A
                 packCoordination: 0.5,      // Moderate flanking behavior
                 territoryRadius: 50,        // Defends hunting grounds
-                homingStrength: 0.1         // Light homing instinct
+                homingStrength: 0.1,        // Light homing instinct
+                // Phase 16: Locomotion - fast pursuit speed
+                locomotionSpeed: 2.0
             }
         },
         // Larger, more aggressive shape
@@ -739,7 +745,9 @@ const Species = {
                 flockingRadius: 30,         // Medium flock awareness
                 packCoordination: 0.0,      // Not a hunter
                 territoryRadius: 35,        // Small territory
-                homingStrength: 0.15        // Moderate homing instinct
+                homingStrength: 0.15,       // Moderate homing instinct
+                // Phase 16: Locomotion - moderate escape speed
+                locomotionSpeed: 1.2
             }
         },
         // Small, compact shape for speed
@@ -836,7 +844,9 @@ const Species = {
                 // Migration: optimized for following seasonal patterns
                 migrationSensitivity: 0.8,   // Strong gradient following
                 wanderlust: 0.7,             // High exploration when hungry
-                seasonalAdaptation: 0.6      // Anticipates changes
+                seasonalAdaptation: 0.6,     // Anticipates changes
+                // Phase 16: Locomotion - travel-oriented speed
+                locomotionSpeed: 1.5
             }
         },
         // Elongated shape for long-distance travel

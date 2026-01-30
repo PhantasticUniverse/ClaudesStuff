@@ -6,7 +6,7 @@ Creative coding experiments. Focus: artificial life, generative art.
 
 Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-**Status**: Phase 15 Complete (Parameter Localization & Multi-Species Separation)
+**Status**: Phase 16 Complete (Creature Locomotion via Kernel Modulation)
 
 ### Running
 
@@ -33,6 +33,12 @@ To run predator-prey ecosystem with proper mass conservation:
 - `species.js` - Genome presets (hunter, prey, grazer, etc.)
 - `environment.js` - Food, signals, seasons, migration zones
 - `ui.js` - Controls
+
+### Phase 16 Features
+
+- **Kernel Modulation Locomotion**: Creatures move via asymmetric kernel offsets (not steering forces)
+- **locomotionSpeed Genome Parameter**: Controls movement speed (0-3 pixels offset)
+- **Species-Specific Speeds**: Hunter=2.0, Prey=1.2, Grazer=0.8, Migrant=1.5
 
 ### Phase 15 Features
 

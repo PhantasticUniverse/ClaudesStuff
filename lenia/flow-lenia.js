@@ -389,6 +389,123 @@ class FlowLenia {
     }
 
     /**
+     * Phase 16: Sample a field value at fractional coordinates using bilinear interpolation
+     * This is used for kernel offset to smoothly shift the potential field
+     * @param {Float32Array} field - The field to sample from
+     * @param {number} x - X coordinate (can be fractional)
+     * @param {number} y - Y coordinate (can be fractional)
+     * @returns {number} - Interpolated value
+     */
+    sampleBilinear(field, x, y) {
+        const { size } = this;
+
+        // Handle wrapping
+        x = ((x % size) + size) % size;
+        y = ((y % size) + size) % size;
+
+        const x0 = Math.floor(x);
+        const y0 = Math.floor(y);
+        const x1 = (x0 + 1) % size;
+        const y1 = (y0 + 1) % size;
+
+        const fx = x - x0;
+        const fy = y - y0;
+
+        // Get four corner values
+        const v00 = field[y0 * size + x0];
+        const v10 = field[y0 * size + x1];
+        const v01 = field[y1 * size + x0];
+        const v11 = field[y1 * size + x1];
+
+        // Bilinear interpolation
+        const v0 = v00 * (1 - fx) + v10 * fx;
+        const v1 = v01 * (1 - fx) + v11 * fx;
+
+        return v0 * (1 - fy) + v1 * fy;
+    }
+
+    /**
+     * Phase 16: Compute kernel offsets for each creature based on heading and locomotionSpeed
+     * This creates the asymmetric kernel effect that propels movement
+     */
+    applyCreatureKernelOffsets() {
+        if (!this.creatureTracker || !this.sensoryEnabled) return;
+
+        for (const creature of this.creatureTracker.creatures) {
+            if (!creature.genome) continue;
+
+            const speed = creature.genome.locomotionSpeed || 0.5;
+
+            // Compute heading direction (unit vector)
+            const headingX = Math.cos(creature.heading);
+            const headingY = Math.sin(creature.heading);
+
+            // Store kernel offset on creature for use in potential shifting
+            creature.kernelOffsetX = headingX * speed;
+            creature.kernelOffsetY = headingY * speed;
+        }
+    }
+
+    /**
+     * Phase 16: Apply potential field offsets to create asymmetric kernel effect
+     * This shifts the potential field for each creature's cells toward its heading,
+     * creating growth at the front and decay at the back - natural locomotion!
+     *
+     * Implementation note: We use a temporary buffer to avoid read-write conflicts
+     */
+    applyPotentialOffsets() {
+        if (!this.creatureTracker) return;
+
+        const { size, potential } = this;
+        const tracker = this.creatureTracker;
+        const labels = tracker.labels;
+
+        // Create a map of creature ID to creature for fast lookup
+        const creatureMap = new Map();
+        for (const creature of tracker.creatures) {
+            if (creature.kernelOffsetX !== undefined || creature.kernelOffsetY !== undefined) {
+                creatureMap.set(creature.id, creature);
+            }
+        }
+
+        if (creatureMap.size === 0) return;
+
+        // Create temporary buffer for offset potential
+        // Only modify cells that belong to creatures with offsets
+        const offsetPotential = new Float32Array(potential);
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const idx = y * size + x;
+                const label = labels[idx];
+
+                if (label === 0) continue;
+
+                // Find the creature this cell belongs to
+                const creature = creatureMap.get(label);
+                if (!creature) continue;
+
+                const dx = creature.kernelOffsetX || 0;
+                const dy = creature.kernelOffsetY || 0;
+
+                if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) continue;
+
+                // Sample potential from offset location (looking "behind" the heading)
+                // This makes cells see what's ahead of them, creating front-growth
+                const sx = x - dx;
+                const sy = y - dy;
+
+                offsetPotential[idx] = this.sampleBilinear(potential, sx, sy);
+            }
+        }
+
+        // Copy offset potential back to main potential array
+        for (let i = 0; i < size * size; i++) {
+            potential[i] = offsetPotential[i];
+        }
+    }
+
+    /**
      * Apply Laplacian diffusion to spread mass slightly
      * This is mass-conservative: each cell shares a fraction of its mass with neighbors
      * We ensure no cell goes negative by limiting how much mass can leave
@@ -609,6 +726,14 @@ class FlowLenia {
         }
 
         this.computePotential();   // U = K * A
+
+        // Phase 16: Apply kernel offsets for directed movement
+        // This creates asymmetric growth patterns that propel creatures
+        if (this.sensoryEnabled && this.creatureTracker) {
+            this.applyCreatureKernelOffsets();  // Compute offsets from headings
+            this.applyPotentialOffsets();       // Shift potential field
+        }
+
         this.computeAffinity();    // affinity = G(U)
         this.computeGradient();    // F = ∇(affinity)
 

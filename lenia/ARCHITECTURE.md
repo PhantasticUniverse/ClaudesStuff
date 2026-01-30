@@ -18,6 +18,7 @@ The simulation creates emergent behaviors including:
 - Emergent collective behaviors: flocking, pack hunting, homing (Phase 13)
 - Migration patterns with seasonal cycles and moving food zones (Phase 14)
 - Parameter localization enabling true multi-species coexistence (Phase 15)
+- Kernel modulation locomotion enabling actual creature movement (Phase 16)
 
 ## File Structure
 
@@ -177,6 +178,9 @@ class Genome {
     wanderlust          // Exploration when food is scarce (0-1)
     seasonalAdaptation  // Anticipate seasonal changes (0-1)
 
+    // Locomotion (Phase 16)
+    locomotionSpeed     // Kernel offset magnitude for self-propulsion (0-3 pixels)
+
     // Methods
     mutate(rate)    // Create mutated offspring
     clone()         // Exact copy
@@ -231,22 +235,28 @@ class CreatureMemory {
 │ 9. computePotential()                                       │
 │    └─ U = K * A (convolution)                               │
 │                                                             │
-│ 10. computeAffinity()                                       │
+│ 10. applyCreatureKernelOffsets() (Phase 16)                 │
+│    └─ Compute offset vectors from heading × locomotionSpeed │
+│                                                             │
+│ 11. applyPotentialOffsets() (Phase 16)                      │
+│    └─ Shift potential field for creature cells              │
+│                                                             │
+│ 12. computeAffinity()                                       │
 │    └─ affinity = G(U) with local mu/sigma (Phase 15)        │
 │                                                             │
-│ 11. computeGradient()                                       │
+│ 13. computeGradient()                                       │
 │    └─ F = ∇(affinity) + directional bias                    │
 │                                                             │
-│ 12. applySteeringForces()                                   │
+│ 14. applySteeringForces()                                   │
 │    └─ Add creature heading influence to flow field          │
 │                                                             │
-│ 13. transportMass()                                         │
+│ 15. transportMass()                                         │
 │    └─ Mass-conservative advection + parameter transport     │
 │                                                             │
-│ 14. applyCreatureRepulsion() (Phase 15)                     │
+│ 16. applyCreatureRepulsion() (Phase 15)                     │
 │    └─ Flow field forces push overlapping creatures apart    │
 │                                                             │
-│ 15. applyDiffusion()                                        │
+│ 17. applyDiffusion()                                        │
 │    └─ Laplacian diffusion to prevent collapse               │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -590,6 +600,70 @@ For proper multi-species with parameter localization:
 | Creature separation | Merged into blob | Maintained separate |
 | Mass conservation | +1470% (explosion) | -20% (expected deaths) |
 | Species identity | Lost on overlap | Preserved |
+
+## Kernel Modulation Locomotion (Phase 16)
+
+### The Movement Problem
+
+Flow-Lenia's affinity dynamics (∇G(U)) create strong pattern-stabilizing forces. Previous steering approaches added forces to the flow field, but these were overwhelmed by the affinity gradient's desire to maintain pattern stability. Creatures would "swim in place" - heading changed but position didn't.
+
+### Solution: Asymmetric Kernel Offset
+
+Instead of fighting CA dynamics with external forces, kernel modulation works **with** the dynamics by shifting the kernel based on heading. This creates the asymmetric growth that original Lenia gliders use for natural locomotion.
+
+```
+Standard kernel: Centered, symmetric → stationary pattern
+Offset kernel:   Shifted toward heading → pattern propels in that direction
+```
+
+### How It Works
+
+1. Each creature has a `locomotionSpeed` genome parameter (0-3 pixels)
+2. Before computing affinity, we offset where cells sample their potential:
+   - Cells sample from `(x - dx, y - dy)` where `dx, dy` = heading × locomotionSpeed
+   - This makes cells "see" what's behind them as local
+3. Growth function responds to offset conditions:
+   - Front edge sees lower density → positive growth
+   - Back edge sees higher density → negative growth
+4. Pattern naturally propels itself forward
+
+### Implementation
+
+```javascript
+// In step(), after computePotential():
+applyCreatureKernelOffsets();  // Compute offsets from headings
+applyPotentialOffsets();       // Shift potential field
+
+// applyCreatureKernelOffsets()
+for (const creature of creatures) {
+    creature.kernelOffsetX = Math.cos(creature.heading) * creature.genome.locomotionSpeed;
+    creature.kernelOffsetY = Math.sin(creature.heading) * creature.genome.locomotionSpeed;
+}
+
+// applyPotentialOffsets()
+for each cell belonging to a creature {
+    // Sample potential from offset location (bilinear interpolation)
+    potential[idx] = sampleBilinear(potential, x - dx, y - dy);
+}
+```
+
+### Species Locomotion Speeds
+
+| Species | locomotionSpeed | Rationale |
+|---------|-----------------|-----------|
+| Hunter | 2.0 | Fast pursuit |
+| Prey | 1.2 | Moderate escape |
+| Grazer | 0.8 | Slow foraging |
+| Migrant | 1.5 | Travel-oriented |
+| Schooler | 1.0 | Moderate group |
+
+### Why This Works
+
+| Aspect | Steering Forces | Kernel Modulation |
+|--------|-----------------|-------------------|
+| Works with CA | ❌ Fights affinity | ✅ Uses affinity |
+| Natural motion | ❌ Teleporting feel | ✅ Flowing motion |
+| Shape stability | ⚠️ May distort | ✅ Self-maintaining |
 
 ## Performance Notes
 

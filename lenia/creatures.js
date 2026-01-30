@@ -177,6 +177,10 @@ class Genome {
         this.migrationSensitivity = defaults.migrationSensitivity ?? 0.5;  // Follow strong food gradients (0-1)
         this.wanderlust = defaults.wanderlust ?? 0.3;                      // Explore when food is scarce (0-1)
         this.seasonalAdaptation = defaults.seasonalAdaptation ?? 0.3;      // Anticipate seasonal changes (0-1)
+
+        // Phase 16: Locomotion parameters
+        // Kernel offset creates asymmetric growth - pattern grows at front, dies at back
+        this.locomotionSpeed = defaults.locomotionSpeed ?? 0.5;            // Kernel offset magnitude (0-3 pixels)
     }
 
     /**
@@ -274,6 +278,10 @@ class Genome {
         // Seasonal adaptation - anticipate changes
         child.seasonalAdaptation = mutate(child.seasonalAdaptation, 0, 1.0);
 
+        // Phase 16: Mutate locomotion parameters
+        // Locomotion speed - kernel offset for self-propulsion
+        child.locomotionSpeed = mutate(child.locomotionSpeed, 0, 3.0);
+
         // Small chance to flip predator status
         if (Math.random() < mutationRate * 0.1) {
             child.isPredator = !child.isPredator;
@@ -326,7 +334,9 @@ class Genome {
             // Phase 14: Migration behavior parameters
             migrationSensitivity: this.migrationSensitivity,
             wanderlust: this.wanderlust,
-            seasonalAdaptation: this.seasonalAdaptation
+            seasonalAdaptation: this.seasonalAdaptation,
+            // Phase 16: Locomotion parameters
+            locomotionSpeed: this.locomotionSpeed
         });
     }
 
@@ -370,7 +380,9 @@ class Genome {
             // Phase 14: Migration behavior defaults
             migrationSensitivity: sensory.migrationSensitivity ?? 0.5,
             wanderlust: sensory.wanderlust ?? 0.3,
-            seasonalAdaptation: sensory.seasonalAdaptation ?? 0.3
+            seasonalAdaptation: sensory.seasonalAdaptation ?? 0.3,
+            // Phase 16: Locomotion defaults
+            locomotionSpeed: sensory.locomotionSpeed ?? 0.5
         });
     }
 }
