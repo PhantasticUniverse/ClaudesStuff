@@ -46,6 +46,13 @@ class FlowLenia {
         // Main state: activation/mass grid
         this.A = new Float32Array(size * size);
 
+        // Phase 15: Parameter localization - store mu, sigma per cell
+        // These flow with mass, enabling multi-species in the same grid
+        this.P_mu = new Float32Array(size * size);     // Local growth center per cell
+        this.P_sigma = new Float32Array(size * size);  // Local growth width per cell
+        this.newP_mu = new Float32Array(size * size);  // Buffer for transport
+        this.newP_sigma = new Float32Array(size * size);
+
         // Working buffers
         this.potential = new Float32Array(size * size);   // K * A (convolution result)
         this.affinity = new Float32Array(size * size);    // G(potential) - where mass wants to be
@@ -135,7 +142,16 @@ class FlowLenia {
      */
     growth(u) {
         const d = (u - this.mu) / this.sigma;
-        return 2 * Math.exp(-d * d / 2) - 1;
+        let g = 2 * Math.exp(-d * d / 2) - 1;
+
+        // Phase 15: Crowding penalty - dampen growth at high densities
+        // When u > 0.7, reduce positive growth to prevent merging
+        if (g > 0 && u > 0.7) {
+            const crowdingFactor = Math.max(0, 1 - (u - 0.7) / 0.3);
+            g *= crowdingFactor;
+        }
+
+        return g;
     }
 
     /**
@@ -188,15 +204,34 @@ class FlowLenia {
      * Affinity = G(U) - this tells us where mass "wants" to be
      * Phase 6: Now includes morphology influence from creature genomes
      * Phase 7: Also stores directional bias for flow field computation
+     * Phase 15: Now uses localized parameters (P_mu, P_sigma) for multi-species
      */
     computeAffinity() {
-        const { size, potential, affinity, A } = this;
+        const { size, potential, affinity, A, P_mu, P_sigma } = this;
 
-        // Phase 6: Check if morphology evolution is active
+        // Phase 15: Check if parameter localization is in use
+        // In ecosystem mode, always use localized parameters
+        const useLocalizedParams = this.sensoryEnabled &&
+                                   this.creatureTracker &&
+                                   this.creatureTracker.ecosystemMode;
+
+        // Phase 6: Check if morphology evolution is active (legacy system)
         const useMorphology = this.sensoryEnabled &&
                               this.creatureTracker &&
                               this.creatureTracker.evolution.enabled &&
-                              this.creatureTracker.creatures.length > 0;
+                              this.creatureTracker.creatures.length > 0 &&
+                              !useLocalizedParams; // Don't use old system if using new localization
+
+        if (useLocalizedParams) {
+            // Phase 15: Use per-cell localized parameters for true multi-species
+            for (let i = 0; i < size * size; i++) {
+                const localMu = P_mu[i];
+                const localSigma = P_sigma[i];
+                affinity[i] = this.growthWithMorphology(potential[i], localMu, localSigma);
+            }
+            this.morphInfluenceCache = null;
+            return;
+        }
 
         if (!useMorphology) {
             // Standard computation without morphology
@@ -208,7 +243,7 @@ class FlowLenia {
             return;
         }
 
-        // Phase 6 & 7: Compute with local morphology influence
+        // Phase 6 & 7: Compute with local morphology influence (legacy)
         // Build a map of morphology influence at each cell
         const morphInfluence = this.computeMorphologyInfluence();
         // Cache for use in flow field computation (Phase 7)
@@ -417,9 +452,12 @@ class FlowLenia {
      * 3. Sum all incoming mass
      */
     transportMass() {
-        const { size, A, newA, Fx, Fy, dt } = this;
+        const { size, A, newA, Fx, Fy, dt, P_mu, P_sigma, newP_mu, newP_sigma } = this;
 
         newA.fill(0);
+        // Phase 15: Also transport parameters - use weighted sum, divide by mass at end
+        newP_mu.fill(0);
+        newP_sigma.fill(0);
 
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
@@ -427,6 +465,10 @@ class FlowLenia {
                 const mass = A[idx];
 
                 if (mass < 0.0001) continue; // Skip near-zero cells for efficiency
+
+                // Phase 15: Get local parameters for this cell
+                const sourceMu = P_mu[idx];
+                const sourceSigma = P_sigma[idx];
 
                 // Compute destination position
                 const fx = Fx[idx];
@@ -454,10 +496,27 @@ class FlowLenia {
                 const w01 = (1 - fx_frac) * fy_frac;
                 const w11 = fx_frac * fy_frac;
 
-                newA[y0w * size + x0w] += mass * w00;
-                newA[y0w * size + x1w] += mass * w10;
-                newA[y1w * size + x0w] += mass * w01;
-                newA[y1w * size + x1w] += mass * w11;
+                const idx00 = y0w * size + x0w;
+                const idx10 = y0w * size + x1w;
+                const idx01 = y1w * size + x0w;
+                const idx11 = y1w * size + x1w;
+
+                // Transport mass
+                newA[idx00] += mass * w00;
+                newA[idx10] += mass * w10;
+                newA[idx01] += mass * w01;
+                newA[idx11] += mass * w11;
+
+                // Phase 15: Transport parameters weighted by mass (for weighted average)
+                newP_mu[idx00] += sourceMu * mass * w00;
+                newP_mu[idx10] += sourceMu * mass * w10;
+                newP_mu[idx01] += sourceMu * mass * w01;
+                newP_mu[idx11] += sourceMu * mass * w11;
+
+                newP_sigma[idx00] += sourceSigma * mass * w00;
+                newP_sigma[idx10] += sourceSigma * mass * w10;
+                newP_sigma[idx01] += sourceSigma * mass * w01;
+                newP_sigma[idx11] += sourceSigma * mass * w11;
             }
         }
 
@@ -467,6 +526,17 @@ class FlowLenia {
         // The rendering will handle values > 1 by clamping only for display
         for (let i = 0; i < size * size; i++) {
             A[i] = Math.max(0, newA[i]);
+
+            // Phase 15: Compute weighted average parameters
+            // This is the "weighted average" mixing rule from Flow Lenia paper
+            if (newA[i] > 0.0001) {
+                P_mu[i] = newP_mu[i] / newA[i];
+                P_sigma[i] = newP_sigma[i] / newA[i];
+            } else {
+                // Empty cells keep global defaults
+                P_mu[i] = this.mu;
+                P_sigma[i] = this.sigma;
+            }
         }
     }
 
@@ -547,6 +617,8 @@ class FlowLenia {
             this.applySteeringForces();
             // Phase 15: Apply pursuit boost for hunters (based on CA predator-prey research)
             this.applyPursuitBoost();
+            // Phase 15: Apply creature repulsion to prevent merging
+            this.applyCreatureRepulsion();
         }
 
         this.transportMass();      // Mass-conservative transport
@@ -640,6 +712,73 @@ class FlowLenia {
                     // Add pursuit velocity to flow field at this cell
                     Fx[idx] += dirX * pursuitStrength * proximityBoost * cell.value;
                     Fy[idx] += dirY * pursuitStrength * proximityBoost * cell.value;
+                }
+            }
+        }
+    }
+
+    /**
+     * Phase 15: Apply repulsion forces between creatures in the flow field
+     * Prevents creatures from merging by physically pushing their mass apart
+     * Based on Flow Lenia research - creatures need to maintain spatial separation
+     */
+    applyCreatureRepulsion() {
+        if (!this.creatureTracker) return;
+
+        const { size, Fx, Fy, A } = this;
+        const tracker = this.creatureTracker;
+        const creatures = tracker.creatures;
+        const repulsionStrength = 8.0;  // Strong push to prevent merging
+        const minSeparation = 35;  // Minimum distance between creature centers
+
+        if (creatures.length < 2) return;
+
+        // For each creature, apply repulsion from all nearby creatures
+        for (let i = 0; i < creatures.length; i++) {
+            const c1 = creatures[i];
+            if (!c1.cells || c1.cells.length === 0) continue;
+
+            const r1 = c1.radius || 10;
+
+            for (let j = i + 1; j < creatures.length; j++) {
+                const c2 = creatures[j];
+                if (!c2.cells || c2.cells.length === 0) continue;
+
+                const r2 = c2.radius || 10;
+                const combinedRadius = r1 + r2;
+                const effectiveMinDist = Math.max(minSeparation, combinedRadius * 1.5);
+
+                // Calculate distance between creatures
+                const dx = tracker.toroidalDelta(c2.x, c1.x, size);
+                const dy = tracker.toroidalDelta(c2.y, c1.y, size);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist >= effectiveMinDist || dist < 0.1) continue;
+
+                // Calculate repulsion force - stronger when closer
+                const overlap = 1 - (dist / effectiveMinDist);
+                const force = overlap * overlap * repulsionStrength;
+
+                // Direction from c1 to c2
+                const dirX = dx / dist;
+                const dirY = dy / dist;
+
+                // Apply repulsion to c1's cells (push away from c2)
+                for (const cell of c1.cells) {
+                    const idx = Math.floor(cell.y) * size + Math.floor(cell.x);
+                    if (idx >= 0 && idx < size * size && A[idx] > 0.1) {
+                        Fx[idx] -= dirX * force * cell.value;
+                        Fy[idx] -= dirY * force * cell.value;
+                    }
+                }
+
+                // Apply repulsion to c2's cells (push away from c1)
+                for (const cell of c2.cells) {
+                    const idx = Math.floor(cell.y) * size + Math.floor(cell.x);
+                    if (idx >= 0 && idx < size * size && A[idx] > 0.1) {
+                        Fx[idx] += dirX * force * cell.value;
+                        Fy[idx] += dirY * force * cell.value;
+                    }
                 }
             }
         }
@@ -878,6 +1017,10 @@ class FlowLenia {
         this.A.fill(0);
         this.frameNumber = 0;
 
+        // Phase 15: Initialize parameter arrays with global defaults
+        this.P_mu.fill(this.mu);
+        this.P_sigma.fill(this.sigma);
+
         // Reset environment and creature tracker
         if (this.environment) {
             this.environment.reset();
@@ -923,8 +1066,19 @@ class FlowLenia {
 
     /**
      * Draw a blob at position (smooth circular brush)
+     * Phase 15: Now accepts optional localMu/localSigma for parameter localization
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     * @param {number} radius - Blob radius
+     * @param {number} value - Mass value (default 1.0)
+     * @param {number} localMu - Local growth center (default: global mu)
+     * @param {number} localSigma - Local growth width (default: global sigma)
      */
-    drawBlob(x, y, radius, value = 1.0) {
+    drawBlob(x, y, radius, value = 1.0, localMu = null, localSigma = null) {
+        // Use global parameters if not specified
+        const muToUse = localMu !== null ? localMu : this.mu;
+        const sigmaToUse = localSigma !== null ? localSigma : this.sigma;
+
         for (let dy = -radius; dy <= radius; dy++) {
             for (let dx = -radius; dx <= radius; dx++) {
                 const dist = Math.sqrt(dx * dx + dy * dy) / radius;
@@ -936,6 +1090,9 @@ class FlowLenia {
 
                     if (value > 0) {
                         this.A[idx] = Math.min(1, this.A[idx] + brushVal * 0.3);
+                        // Phase 15: Set local parameters for this cell
+                        this.P_mu[idx] = muToUse;
+                        this.P_sigma[idx] = sigmaToUse;
                     } else {
                         this.A[idx] = Math.max(0, this.A[idx] + brushVal * 0.3);
                     }

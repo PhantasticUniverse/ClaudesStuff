@@ -1226,6 +1226,7 @@ class CreatureTracker {
 
     /**
      * Update target headings for all creatures based on sensors
+     * Phase 15: Added momentum to prevent oscillation when forces balance
      */
     updateCreatureHeadings(environment) {
         for (const creature of this.creatures) {
@@ -1234,7 +1235,27 @@ class CreatureTracker {
 
             if (senseMag > 0.001) {
                 // Compute target heading from sensory input
-                creature.targetHeading = Math.atan2(sense.y, sense.x);
+                const senseHeading = Math.atan2(sense.y, sense.x);
+
+                // Phase 15: Add momentum to prevent oscillation
+                // Creatures maintain their current direction unless strongly pushed otherwise
+                const momentumFactor = 0.3;  // How much current heading influences target
+                const currentDirX = Math.cos(creature.heading);
+                const currentDirY = Math.sin(creature.heading);
+                const senseDirX = Math.cos(senseHeading);
+                const senseDirY = Math.sin(senseHeading);
+
+                // Blend current heading with sensory direction
+                const blendedX = currentDirX * momentumFactor + senseDirX * (1 - momentumFactor);
+                const blendedY = currentDirY * momentumFactor + senseDirY * (1 - momentumFactor);
+
+                // Normalize and get final heading
+                const blendMag = Math.sqrt(blendedX * blendedX + blendedY * blendedY);
+                if (blendMag > 0.001) {
+                    creature.targetHeading = Math.atan2(blendedY / blendMag, blendedX / blendMag);
+                } else {
+                    creature.targetHeading = creature.heading;
+                }
             } else {
                 // Keep current heading if no sensory input
                 creature.targetHeading = creature.heading;
@@ -1881,16 +1902,23 @@ class CreatureTracker {
             return { x, y };
         };
 
-        // Spawn hunters (larger blobs)
+        // Phase 15: Get species-specific parameters from presets for parameter localization
+        // These mu/sigma values will make each species operate under different growth rules
+        const hunterMu = Species.hunter.params.mu;      // 0.24
+        const hunterSigma = Species.hunter.params.sigma; // 0.028
+        const preyMu = Species.prey.params.mu;          // 0.18
+        const preySigma = Species.prey.params.sigma;    // 0.035
+
+        // Spawn hunters (larger blobs) - Phase 15: Pass species-specific parameters
         for (let i = 0; i < numHunters; i++) {
-            const pos = getSpawnPosition(50);
-            flowLenia.drawBlob(pos.x, pos.y, 14, 0.9);
+            const pos = getSpawnPosition(80);
+            flowLenia.drawBlob(pos.x, pos.y, 14, 0.9, hunterMu, hunterSigma);
         }
 
-        // Spawn prey (smaller blobs, more spread out)
+        // Spawn prey (smaller blobs) - Phase 15: Pass species-specific parameters
         for (let i = 0; i < numPrey; i++) {
-            const pos = getSpawnPosition(30);
-            flowLenia.drawBlob(pos.x, pos.y, 10, 0.85);
+            const pos = getSpawnPosition(60);
+            flowLenia.drawBlob(pos.x, pos.y, 10, 0.85, preyMu, preySigma);
         }
 
         // Store expected counts for genome assignment
