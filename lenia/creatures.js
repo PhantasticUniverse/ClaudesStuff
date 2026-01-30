@@ -1939,6 +1939,77 @@ class CreatureTracker {
     }
 
     /**
+     * Spawn a peaceful Zen Mode ecosystem - no predators, just peaceful grazers and schoolers
+     * Creates a relaxing, meditative viewing experience
+     */
+    spawnZenEcosystem(flowLenia, count = 8) {
+        const size = flowLenia.size;
+
+        // Use peaceful species: grazers and schoolers (no hunters)
+        this.grazerGenome = new Genome(Species.grazer.params.genome);
+        this.schoolerGenome = new Genome(Species.schooler.params.genome);
+
+        // Clear existing creatures
+        this.creatures = [];
+        this.ecosystemMode = true;
+
+        // Track spawned positions to avoid overlap
+        const positions = [];
+
+        const getSpawnPosition = (minDist = 50) => {
+            for (let attempts = 0; attempts < 50; attempts++) {
+                const x = Math.random() * size;
+                const y = Math.random() * size;
+                let valid = true;
+
+                for (const pos of positions) {
+                    if (this.toroidalDistance(x, y, pos.x, pos.y) < minDist) {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (valid) {
+                    positions.push({ x, y });
+                    return { x, y };
+                }
+            }
+            // Fallback
+            const x = Math.random() * size;
+            const y = Math.random() * size;
+            positions.push({ x, y });
+            return { x, y };
+        };
+
+        // Get species parameters
+        const grazerMu = Species.grazer.params.mu;
+        const grazerSigma = Species.grazer.params.sigma;
+        const schoolerMu = Species.schooler.params.mu || 0.22;
+        const schoolerSigma = Species.schooler.params.sigma || 0.03;
+
+        // Spawn a mix of grazers and schoolers
+        const numGrazers = Math.floor(count * 0.5);
+        const numSchoolers = count - numGrazers;
+
+        // Spawn grazers
+        for (let i = 0; i < numGrazers; i++) {
+            const pos = getSpawnPosition(60);
+            flowLenia.drawBlob(pos.x, pos.y, 12, 0.85, grazerMu, grazerSigma);
+        }
+
+        // Spawn schoolers
+        for (let i = 0; i < numSchoolers; i++) {
+            const pos = getSpawnPosition(55);
+            flowLenia.drawBlob(pos.x, pos.y, 10, 0.85, schoolerMu, schoolerSigma);
+        }
+
+        // Store expected counts
+        this._pendingGrazers = numGrazers;
+        this._pendingSchoolers = numSchoolers;
+        this._zenMode = true;
+    }
+
+    /**
      * Assign genomes to newly detected creatures in ecosystem mode
      * Uses pending hunter/prey counts to assign largest creatures as hunters
      */
@@ -1950,6 +2021,33 @@ class CreatureTracker {
         if (unassigned.length === 0) return;
 
         unassigned.sort((a, b) => b.mass - a.mass);
+
+        // Handle Zen mode (peaceful, no predators)
+        if (this._zenMode) {
+            let grazersNeeded = this._pendingGrazers || 0;
+            let schoolersNeeded = this._pendingSchoolers || 0;
+
+            // Clear pending counts
+            if (this._pendingGrazers !== undefined) {
+                this._pendingGrazers = 0;
+                this._pendingSchoolers = 0;
+            }
+
+            for (const creature of unassigned) {
+                if (grazersNeeded > 0 && this.grazerGenome) {
+                    creature.genome = this.grazerGenome.clone();
+                    grazersNeeded--;
+                } else if (this.schoolerGenome) {
+                    creature.genome = this.schoolerGenome.clone();
+                } else if (this.grazerGenome) {
+                    creature.genome = this.grazerGenome.clone();
+                } else {
+                    this.assignDefaultGenome(creature);
+                }
+                creature.energy = this.evolution.minCreatureEnergy + creature.mass * 0.6;
+            }
+            return;
+        }
 
         // Count how many hunters and prey we currently have
         const currentHunters = this.creatures.filter(c => c.genome?.isPredator).length;

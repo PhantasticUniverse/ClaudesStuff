@@ -18,6 +18,9 @@ let generation = 0;
 let lastFrameTime = 0;
 let fps = 0;
 
+// Living Aquarium: Zen Mode state
+let zenModeActive = false;
+
 // Phase 12: Signal visualization toggles
 let showAlarmSignals = false;
 let showHuntingSignals = false;
@@ -56,6 +59,32 @@ const ColorMaps = {
         [0, 0, 0], [30, 30, 30], [60, 60, 60], [90, 90, 90],
         [120, 120, 120], [150, 150, 150], [180, 180, 180], [210, 210, 210],
         [240, 240, 240], [255, 255, 255]
+    ],
+    // New aquarium-focused palettes
+    bioluminescent: [
+        [2, 4, 15], [5, 10, 30], [10, 20, 50], [15, 35, 70],
+        [20, 60, 100], [40, 100, 140], [60, 150, 180], [100, 200, 220],
+        [150, 230, 255], [200, 255, 255]
+    ],
+    microscopy: [
+        [10, 5, 2], [30, 18, 8], [50, 32, 15], [80, 55, 25],
+        [120, 85, 40], [160, 120, 60], [200, 160, 90], [230, 200, 130],
+        [250, 235, 180], [255, 250, 220]
+    ],
+    cosmic: [
+        [5, 2, 15], [20, 8, 40], [40, 15, 70], [70, 25, 100],
+        [110, 40, 130], [150, 60, 160], [190, 90, 180], [220, 130, 200],
+        [240, 180, 220], [255, 220, 255]
+    ],
+    aurora: [
+        [2, 5, 20], [5, 15, 40], [10, 30, 60], [20, 60, 80],
+        [40, 100, 100], [80, 150, 120], [120, 200, 150], [160, 230, 180],
+        [200, 250, 210], [230, 255, 240]
+    ],
+    ember: [
+        [5, 2, 2], [20, 8, 5], [45, 15, 10], [80, 25, 15],
+        [120, 40, 20], [170, 60, 25], [210, 90, 30], [240, 130, 50],
+        [255, 180, 90], [255, 230, 150]
     ]
 };
 
@@ -614,6 +643,7 @@ function draw() {
  */
 function drawCreatureHeadings() {
     if (!creatureTracker || creatureTracker.count === 0) return;
+    if (zenModeActive) return;  // Hide in Zen mode for cleaner aesthetic
 
     const sim = flowLenia || lenia;
     const cellSize = width / sim.size;
@@ -706,6 +736,7 @@ function drawSensorCones() {
 
 /**
  * Phase 12: Draw glowing aura around creatures that recently emitted signals
+ * Enhanced for Living Aquarium aesthetic
  */
 function drawCreatureGlow() {
     if (!creatureTracker || creatureTracker.count === 0) return;
@@ -717,11 +748,45 @@ function drawCreatureGlow() {
     noStroke();
 
     for (const creature of creatureTracker.getCreatures()) {
+        const screenX = creature.x * cellSize;
+        const screenY = creature.y * cellSize;
+
+        // Always draw a subtle ambient glow for living creatures (Living Aquarium feature)
+        if (typeof zenModeActive !== 'undefined' && zenModeActive) {
+            // Enhanced glow in Zen mode
+            const baseRadius = creature.radius * cellSize * 2.5;
+            const energy = creature.energy || 50;
+            const energyNorm = Math.min(1, energy / 80);
+
+            // Outer soft glow - color based on creature type
+            const isPredator = creature.genome?.isPredator;
+            let glowR, glowG, glowB;
+            if (isPredator) {
+                glowR = 255; glowG = 100; glowB = 100;
+            } else {
+                glowR = 100; glowG = 200; glowB = 255;
+            }
+
+            // Pulsing effect based on time
+            const pulse = 0.7 + 0.3 * Math.sin(millis() * 0.003 + creature.id * 0.5);
+
+            // Outer glow
+            fill(glowR, glowG, glowB, 15 * pulse * energyNorm);
+            ellipse(screenX, screenY, baseRadius * 3, baseRadius * 3);
+
+            // Middle glow
+            fill(glowR, glowG, glowB, 25 * pulse * energyNorm);
+            ellipse(screenX, screenY, baseRadius * 2, baseRadius * 2);
+
+            // Inner glow
+            fill(glowR, glowG, glowB, 40 * pulse * energyNorm);
+            ellipse(screenX, screenY, baseRadius * 1.3, baseRadius * 1.3);
+        }
+
+        // Signal-based glow (original behavior)
         const recentSignal = creatureTracker.getRecentSignal(creature);
         if (!recentSignal) continue;
 
-        const screenX = creature.x * cellSize;
-        const screenY = creature.y * cellSize;
         const glowRadius = creature.radius * cellSize * 3;
 
         // Get signal color
@@ -751,6 +816,7 @@ function drawCreatureGlow() {
 function drawCreatureEnergyBars() {
     if (!creatureTracker || creatureTracker.count === 0) return;
     if (!evolutionEnabled) return;  // Only show when evolution is active
+    if (zenModeActive) return;  // Hide in Zen mode for cleaner aesthetic
 
     const sim = flowLenia || lenia;
     const cellSize = width / sim.size;
@@ -981,6 +1047,11 @@ function handleDraw() {
 
 // Keyboard shortcuts
 function keyPressed() {
+    // ESC exits Zen mode
+    if (keyCode === ESCAPE && zenModeActive) {
+        exitZenMode();
+        return false;
+    }
     if (key === ' ') {
         paused = !paused;
         document.getElementById('btn-pause').textContent = paused ? 'Resume' : 'Pause';
@@ -996,6 +1067,133 @@ function keyPressed() {
     if (key === 's' || key === 'S') {
         saveScreenshot();
     }
+    if (key === 'z' || key === 'Z') {
+        toggleZenMode();
+    }
+}
+
+/**
+ * Toggle Zen Mode - immersive fullscreen viewing
+ */
+function toggleZenMode() {
+    if (zenModeActive) {
+        exitZenMode();
+    } else {
+        enterZenMode();
+    }
+}
+
+/**
+ * Enter Zen Mode - hide UI, fullscreen canvas, spawn peaceful ecosystem
+ */
+function enterZenMode() {
+    zenModeActive = true;
+
+    // Hide controls panel
+    const controls = document.getElementById('controls');
+    if (controls) {
+        controls.style.display = 'none';
+    }
+
+    // Add zen mode class to body
+    document.body.classList.add('zen-mode');
+
+    // Make canvas container fullscreen
+    const container = document.getElementById('canvas-container');
+    if (container) {
+        container.classList.add('zen-fullscreen');
+    }
+
+    // Show the zen hint
+    const zenHint = document.getElementById('zen-hint');
+    if (zenHint) {
+        zenHint.style.display = 'block';
+    }
+
+    // Resize canvas to fill screen
+    resizeCanvas(windowWidth, windowHeight);
+
+    // If simulation is empty or very sparse, spawn a peaceful ecosystem
+    const sim = (typeof useFlowLenia !== 'undefined' && useFlowLenia && flowLenia) ? flowLenia : lenia;
+    if (sim.totalMass() < 100) {
+        // Auto-setup for peaceful viewing
+        if (typeof setFlowMode === 'function') {
+            setFlowMode(true);
+        }
+        if (typeof setSensoryMode === 'function') {
+            setSensoryMode(true);
+        }
+        if (typeof setEvolutionMode === 'function') {
+            setEvolutionMode(true);
+        }
+
+        // Spawn peaceful grazers and schoolers (no predators for zen mode)
+        if (flowLenia && creatureTracker && environment) {
+            flowLenia.clear();
+            environment.reset();
+            environment.initializeFood();
+            // Spawn only prey species for peaceful viewing
+            creatureTracker.spawnZenEcosystem(flowLenia, 8);
+            initialMass = flowLenia.totalMass();
+        }
+    }
+
+    // Resume if paused
+    if (paused) {
+        paused = false;
+    }
+
+    // Add click listener to exit zen mode (with delay to avoid immediate trigger)
+    setTimeout(() => {
+        document.addEventListener('click', zenModeClickHandler);
+    }, 500);
+}
+
+// Handler for clicking to exit Zen mode
+function zenModeClickHandler(e) {
+    // Only exit if actually in zen mode and click is on canvas area
+    if (zenModeActive) {
+        // Don't exit if clicking on UI elements
+        const target = e.target;
+        if (target.tagName === 'CANVAS' || target.id === 'canvas-container' ||
+            target.classList.contains('zen-fullscreen')) {
+            exitZenMode();
+        }
+    }
+}
+
+/**
+ * Exit Zen Mode - restore UI
+ */
+function exitZenMode() {
+    zenModeActive = false;
+
+    // Show controls panel
+    const controls = document.getElementById('controls');
+    if (controls) {
+        controls.style.display = 'block';
+    }
+
+    // Remove zen mode class
+    document.body.classList.remove('zen-mode');
+
+    // Remove fullscreen class
+    const container = document.getElementById('canvas-container');
+    if (container) {
+        container.classList.remove('zen-fullscreen');
+    }
+
+    // Hide the zen hint
+    const zenHint = document.getElementById('zen-hint');
+    if (zenHint) {
+        zenHint.style.display = 'none';
+    }
+
+    // Remove click listener
+    document.removeEventListener('click', zenModeClickHandler);
+
+    // Restore canvas size
+    windowResized();
 }
 
 function resetSimulation() {
@@ -1009,8 +1207,15 @@ function resetSimulation() {
 }
 
 function saveScreenshot() {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    saveCanvas(`lenia-${timestamp}`, 'png');
+    const canvas = document.querySelector('canvas');
+    if (canvas) {
+        // Use enhanced screenshot with vignette
+        ScreenshotCapture.download(canvas, null, 'png', true);
+    } else {
+        // Fallback to p5.js save
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        saveCanvas(`lenia-${timestamp}`, 'png');
+    }
 }
 
 // Window resize handling

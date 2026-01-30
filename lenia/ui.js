@@ -854,6 +854,165 @@ function initUI() {
     syncUIToParams();
     updateInteractionMatrix();
     updateGalleryList();
+
+    // Living Aquarium: Zen Mode button
+    const zenBtn = document.getElementById('btn-zen-mode');
+    if (zenBtn) {
+        zenBtn.addEventListener('click', () => {
+            if (typeof toggleZenMode === 'function') {
+                toggleZenMode();
+            }
+        });
+    }
+
+    // Living Aquarium: Preset scene buttons
+    document.querySelectorAll('.scene-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const scene = btn.dataset.scene;
+            loadPresetScene(scene);
+        });
+    });
+
+    // Living Aquarium: Welcome overlay (first-run experience)
+    initWelcomeOverlay();
+}
+
+/**
+ * Living Aquarium: Preset Scenes
+ * Each scene combines color palette, species, and environment settings
+ */
+const PresetScenes = {
+    'peaceful-pond': {
+        name: 'Peaceful Pond',
+        colorMap: 'aurora',
+        species: 'grazer',
+        flowStrength: 0.8,
+        diffusion: 0.12,
+        foodSpawnRate: 0.004,
+        description: 'Slow grazers in a warm, green pond'
+    },
+    'deep-ocean': {
+        name: 'Deep Ocean',
+        colorMap: 'bioluminescent',
+        species: 'schooler',
+        flowStrength: 1.0,
+        diffusion: 0.08,
+        foodSpawnRate: 0.002,
+        description: 'Glowing creatures in the abyss'
+    },
+    'microscope': {
+        name: 'Microscope',
+        colorMap: 'microscopy',
+        species: 'amoeba',
+        flowStrength: 1.2,
+        diffusion: 0.15,
+        foodSpawnRate: 0.003,
+        description: 'Watching life under a lens'
+    },
+    'cosmic-soup': {
+        name: 'Cosmic Soup',
+        colorMap: 'cosmic',
+        species: 'vortex',
+        flowStrength: 1.5,
+        diffusion: 0.06,
+        foodSpawnRate: 0.002,
+        description: 'Nebular life forms swirl in space'
+    }
+};
+
+/**
+ * Load a preset scene
+ */
+function loadPresetScene(sceneId) {
+    const scene = PresetScenes[sceneId];
+    if (!scene) return;
+
+    // Switch to Flow-Lenia mode
+    setFlowMode(true);
+
+    // Apply color palette
+    const colorSelect = document.getElementById('color-scheme');
+    if (colorSelect && ColorMaps[scene.colorMap]) {
+        colorSelect.value = scene.colorMap;
+        lenia.colorMap = scene.colorMap;
+        if (flowLenia) flowLenia.colorMap = scene.colorMap;
+        updateColorPreview();
+    }
+
+    // Apply flow parameters
+    if (flowLenia) {
+        flowLenia.flowStrength = scene.flowStrength;
+        flowLenia.diffusion = scene.diffusion;
+        setSliderValue('flow-strength', scene.flowStrength);
+        setSliderValue('flow-diffusion', scene.diffusion);
+    }
+
+    // Apply environment settings
+    if (environment) {
+        environment.params.foodSpawnRate = scene.foodSpawnRate;
+        setSliderValue('food-spawn', scene.foodSpawnRate);
+    }
+
+    // Load the species
+    const speciesSelect = document.getElementById('species-select');
+    if (speciesSelect && Species[scene.species]) {
+        speciesSelect.value = scene.species;
+        flowLenia.loadSpecies(scene.species);
+        initialMass = flowLenia.totalMass();
+    }
+
+    // Enable sensory mode for sensory species
+    const speciesData = Species[scene.species];
+    if (speciesData && speciesData.params.isSensorySpecies) {
+        setSensoryMode(true);
+    }
+
+    generation = 0;
+    syncUIToParams();
+}
+
+/**
+ * Initialize the welcome overlay (first-run experience)
+ */
+function initWelcomeOverlay() {
+    // Check if this is the user's first visit
+    const hasVisited = localStorage.getItem('lenia_has_visited');
+
+    const overlay = document.getElementById('welcome-overlay');
+    if (!overlay) return;
+
+    if (!hasVisited) {
+        // Show welcome overlay
+        overlay.style.display = 'flex';
+
+        // "Watch" button enters Zen mode
+        const watchBtn = document.getElementById('btn-welcome-watch');
+        if (watchBtn) {
+            watchBtn.addEventListener('click', () => {
+                overlay.style.display = 'none';
+                localStorage.setItem('lenia_has_visited', 'true');
+
+                // Set up a beautiful default scene then enter Zen mode
+                loadPresetScene('deep-ocean');
+
+                // Small delay to let scene load, then enter Zen mode
+                setTimeout(() => {
+                    if (typeof enterZenMode === 'function') {
+                        enterZenMode();
+                    }
+                }, 100);
+            });
+        }
+
+        // "Explore" link shows controls
+        const exploreLink = document.getElementById('btn-welcome-explore');
+        if (exploreLink) {
+            exploreLink.addEventListener('click', () => {
+                overlay.style.display = 'none';
+                localStorage.setItem('lenia_has_visited', 'true');
+            });
+        }
+    }
 }
 
 /**

@@ -6,7 +6,7 @@ Creative coding experiments. Focus: artificial life, generative art.
 
 Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-**Status**: Phase 16 Complete (Creature Locomotion via Kernel Modulation)
+**Status**: Phase 17 Complete (Living Aquarium - Visual Enhancement & Zen Mode)
 
 ### Running
 
@@ -16,7 +16,22 @@ open lenia/index.html
 npx live-server lenia/
 ```
 
-### Ecosystem Mode (IMPORTANT)
+### Quick Start: Zen Mode
+
+For an instant meditative experience:
+1. Press **Z** or click **"Enter Zen Mode"** button
+2. Watch peaceful creatures float across the screen
+3. Press **ESC** or click anywhere to exit
+
+### Preset Scenes
+
+Click any preset scene button for instant beautiful viewing:
+- **Peaceful Pond** - Slow grazers, warm aurora colors
+- **Deep Ocean** - Bioluminescent creatures in the abyss
+- **Microscope** - Amber-gold microscopy aesthetic
+- **Cosmic Soup** - Purple/pink nebula creatures
+
+### Ecosystem Mode
 
 To run predator-prey ecosystem with proper mass conservation:
 1. Click **"Flow-Lenia"** button (enables mass-conservative dynamics)
@@ -27,12 +42,22 @@ To run predator-prey ecosystem with proper mass conservation:
 
 ### Key Files
 
-- `lenia.js` - Core simulation & rendering
+- `lenia.js` - Core simulation & rendering, Zen mode
 - `flow-lenia.js` - Mass-conservative dynamics, parameter localization
 - `creatures.js` - Detection, tracking, evolution, predation
 - `species.js` - Genome presets (hunter, prey, grazer, etc.)
 - `environment.js` - Food, signals, seasons, migration zones
-- `ui.js` - Controls
+- `ui.js` - Controls, preset scenes, welcome overlay
+- `recorder.js` - Screenshot with vignette, video recording
+
+### Phase 17 Features (Living Aquarium)
+
+- **Zen Mode**: Fullscreen immersive viewing (press Z), hides all UI
+- **New Color Palettes**: Bioluminescent, Microscopy, Cosmic, Aurora, Ember
+- **Preset Scenes**: One-click beautiful configurations
+- **Enhanced Glow**: Creatures have pulsing ambient glow in Zen mode
+- **Screenshot Vignette**: Auto-applied for polished captures
+- **Welcome Overlay**: First-run experience guides new users
 
 ### Phase 16 Features
 

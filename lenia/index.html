@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lenia Explorer - Phase 15: Research & Tuning</title>
+    <title>Lenia - A Digital Aquarium</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
     <style>
@@ -379,14 +379,166 @@
             padding: 4px 8px;
             font-size: 0.75em;
         }
+
+        /* Zen Mode Styles */
+        body.zen-mode {
+            cursor: none;
+        }
+
+        body.zen-mode #controls {
+            display: none !important;
+        }
+
+        body.zen-mode #canvas-container {
+            width: 100vw !important;
+            height: 100vh !important;
+        }
+
+        #canvas-container.zen-fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1000;
+        }
+
+        /* Zen mode exit hint */
+        .zen-hint {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 1001;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 3s;
+        }
+
+        body.zen-mode .zen-hint {
+            animation: fadeOut 5s forwards;
+        }
+
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* Welcome overlay */
+        #welcome-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(5, 5, 10, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        #welcome-overlay h1 {
+            font-size: 2.5em;
+            font-weight: 200;
+            letter-spacing: 8px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        #welcome-overlay .tagline {
+            font-size: 1.1em;
+            color: #888;
+            margin-bottom: 50px;
+            letter-spacing: 2px;
+        }
+
+        #welcome-overlay .welcome-btn {
+            padding: 16px 48px;
+            font-size: 1.1em;
+            background: linear-gradient(135deg, #2a4a6a 0%, #3a5a7a 100%);
+            border: none;
+            color: #fff;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+
+        #welcome-overlay .welcome-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(100, 170, 255, 0.3);
+        }
+
+        #welcome-overlay .explore-link {
+            font-size: 0.85em;
+            color: #666;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        #welcome-overlay .explore-link:hover {
+            color: #888;
+        }
+
+        /* Preset scene selector */
+        .scene-selector {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .scene-btn {
+            padding: 6px 12px;
+            font-size: 0.75em;
+            border-radius: 15px;
+        }
     </style>
 </head>
 <body>
+    <!-- Welcome overlay (first-run experience) -->
+    <div id="welcome-overlay" style="display: none;">
+        <h1>LENIA</h1>
+        <p class="tagline">A Digital Aquarium</p>
+        <button class="welcome-btn" id="btn-welcome-watch">Watch</button>
+        <span class="explore-link" id="btn-welcome-explore">Explore Settings</span>
+    </div>
+
+    <!-- Zen mode hint -->
+    <div class="zen-hint" id="zen-hint" style="display: none;">Press ESC or click to exit</div>
+
     <div id="container">
         <div id="canvas-container"></div>
         <div id="controls">
             <h1>LENIA EXPLORER</h1>
-            <p class="subtitle">Phase 15 - Research & Tuning</p>
+            <p class="subtitle">Living Aquarium</p>
+
+            <!-- Zen Mode Quick Access -->
+            <div class="section" style="margin-bottom: 15px;">
+                <button id="btn-zen-mode" class="primary" style="width: 100%; padding: 12px;">
+                    🌊 Enter Zen Mode (Z)
+                </button>
+            </div>
+
+            <!-- Preset Scenes -->
+            <div class="section">
+                <div class="section-title">Quick Scenes</div>
+                <div class="scene-selector">
+                    <button class="scene-btn" data-scene="peaceful-pond">Peaceful Pond</button>
+                    <button class="scene-btn" data-scene="deep-ocean">Deep Ocean</button>
+                    <button class="scene-btn" data-scene="microscope">Microscope</button>
+                    <button class="scene-btn" data-scene="cosmic-soup">Cosmic Soup</button>
+                </div>
+            </div>
 
             <!-- Mode Tabs -->
             <div class="mode-tabs">
@@ -850,12 +1002,21 @@
                 <div class="control-group">
                     <label>Color Scheme</label>
                     <select id="color-scheme">
-                        <option value="viridis">Viridis</option>
-                        <option value="plasma">Plasma</option>
-                        <option value="magma">Magma</option>
-                        <option value="inferno">Inferno</option>
-                        <option value="ocean">Ocean</option>
-                        <option value="grayscale">Grayscale</option>
+                        <optgroup label="Aquarium">
+                            <option value="bioluminescent">Bioluminescent</option>
+                            <option value="microscopy">Microscopy</option>
+                            <option value="cosmic">Cosmic</option>
+                            <option value="aurora">Aurora</option>
+                            <option value="ember">Ember</option>
+                        </optgroup>
+                        <optgroup label="Classic">
+                            <option value="viridis">Viridis</option>
+                            <option value="plasma">Plasma</option>
+                            <option value="magma">Magma</option>
+                            <option value="inferno">Inferno</option>
+                            <option value="ocean">Ocean</option>
+                            <option value="grayscale">Grayscale</option>
+                        </optgroup>
                     </select>
                     <div class="color-preview" id="color-preview"></div>
                 </div>

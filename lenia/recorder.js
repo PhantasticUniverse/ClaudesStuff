@@ -299,7 +299,7 @@ class GifRecorder {
 }
 
 /**
- * Simple screenshot functionality
+ * Simple screenshot functionality with Living Aquarium enhancements
  */
 class ScreenshotCapture {
     /**
@@ -310,13 +310,52 @@ class ScreenshotCapture {
     }
 
     /**
-     * Download screenshot
+     * Capture with vignette effect for polished look
      */
-    static download(canvas, filename = null, format = 'png') {
-        const dataUrl = this.capture(canvas, format);
+    static captureWithVignette(canvas, vignetteStrength = 0.3) {
+        // Create temp canvas
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const ctx = tempCanvas.getContext('2d');
+
+        // Draw original
+        ctx.drawImage(canvas, 0, 0);
+
+        // Add vignette
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.max(centerX, centerY) * 1.2;
+
+        const gradient = ctx.createRadialGradient(
+            centerX, centerY, radius * 0.5,
+            centerX, centerY, radius
+        );
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0)');
+        gradient.addColorStop(1, `rgba(0, 0, 0, ${vignetteStrength})`);
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        return tempCanvas.toDataURL('image/png');
+    }
+
+    /**
+     * Download screenshot with optional vignette
+     */
+    static download(canvas, filename = null, format = 'png', addVignette = true) {
+        let dataUrl;
+
+        if (addVignette) {
+            dataUrl = this.captureWithVignette(canvas, 0.25);
+        } else {
+            dataUrl = this.capture(canvas, format);
+        }
+
         const a = document.createElement('a');
         a.href = dataUrl;
-        a.download = filename || `lenia-screenshot-${Date.now()}.${format}`;
+        a.download = filename || `lenia-${Date.now()}.${format}`;
         a.click();
     }
 }
