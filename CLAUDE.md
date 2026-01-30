@@ -49,6 +49,20 @@ To run predator-prey ecosystem with proper mass conservation:
 - `environment.js` - Food, signals, seasons, migration zones
 - `ui.js` - Controls, preset scenes, welcome overlay
 - `recorder.js` - Screenshot with vignette, video recording
+- `kernels.js` - Kernel types (ring, gaussian, filled, spiral, etc.)
+
+### Initial State
+
+The app starts **paused** on Standard Lenia with the **Orbium (Glider)** preset. Press Space or click Resume to start the simulation.
+
+### Research Notes
+
+See `lenia/docs/lenia-research-notes.md` for detailed research findings on:
+- Filled vs ring-shaped creatures (why rings form naturally)
+- Orbium parameters and species taxonomy
+- Growth function tuning guidelines
+- Flow-Lenia mechanics
+- **Preset categories and locomotion architecture**
 
 ### Phase 17 Features (Living Aquarium)
 
@@ -64,7 +78,18 @@ To run predator-prey ecosystem with proper mass conservation:
 
 - **Kernel Modulation Locomotion**: Creatures move via asymmetric kernel offsets (not steering forces)
 - **locomotionSpeed Genome Parameter**: Controls movement speed (0-3 pixels offset)
-- **Species-Specific Speeds**: Hunter=2.0, Prey=1.2, Grazer=0.8, Migrant=1.5
+- **Species-Specific Speeds**: Hunter=2.0, Prey=1.2, Grazer=0.8, Migrant=1.5, Swimmer=1.5, Vortex=1.0
+
+### Preset Categories
+
+| Category | Mode | Has Locomotion? | Examples |
+|----------|------|-----------------|----------|
+| Standard | Standard Lenia | N/A (glider dynamics) | Orbium, Geminium, Scutium |
+| Flow Passive | Flow only | No (wobble in place) | Amoeba, Droplet |
+| Flow Active | Flow + Sensory | **Yes** | Swimmer, Vortex |
+| Sensory | Flow + Sensory | **Yes** | Grazer, Schooler, Hunter, Prey, Migrant |
+
+**Note**: Swimmer and Vortex require the Sensory Mode to be enabled for locomotion (auto-enabled via `isSensorySpecies: true`).
 
 ### Phase 15 Features
 

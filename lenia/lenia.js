@@ -13,7 +13,7 @@
  */
 
 let lenia;
-let paused = false;
+let paused = true;
 let generation = 0;
 let lastFrameTime = 0;
 let fps = 0;
@@ -200,9 +200,9 @@ const ColorMaps = {
         [240, 180, 220], [255, 220, 255]
     ],
     aurora: [
-        [2, 5, 20], [5, 15, 40], [10, 30, 60], [20, 60, 80],
-        [40, 100, 100], [80, 150, 120], [120, 200, 150], [160, 230, 180],
-        [200, 250, 210], [230, 255, 240]
+        [8, 20, 30], [18, 40, 55], [30, 65, 75], [50, 95, 95],
+        [75, 125, 115], [105, 160, 135], [140, 195, 160], [180, 225, 190],
+        [215, 250, 220], [240, 255, 245]
     ],
     ember: [
         [5, 2, 2], [20, 8, 5], [45, 15, 10], [80, 25, 15],
@@ -247,6 +247,9 @@ class Lenia {
         this.kernel = null;
         this.colorMap = 'viridis';
 
+        // FFT convolution for O(N² log N) performance
+        this.fftConvolver = FFT.createConvolver(size);
+
         this.updateKernel();
     }
 
@@ -256,11 +259,20 @@ class Lenia {
     updateKernel() {
         const p = this.kernelParams;
         switch (this.kernelType) {
+            case 'bump4':
+                this.kernel = Kernels.bump4(this.R);
+                break;
+            case 'quad4':
+                this.kernel = Kernels.quad4(this.R, p.betas || [1, 1, 1]);
+                break;
             case 'ring':
                 this.kernel = Kernels.ring(this.R, this.peaks);
                 break;
             case 'gaussian':
                 this.kernel = Kernels.gaussian(this.R);
+                break;
+            case 'filled':
+                this.kernel = Kernels.filled(this.R, p.falloff || 1.0);
                 break;
             case 'mexicanHat':
                 this.kernel = Kernels.mexicanHat(this.R);
@@ -283,6 +295,11 @@ class Lenia {
             default:
                 this.kernel = Kernels.ring(this.R, this.peaks);
         }
+
+        // Update FFT convolver with new kernel
+        if (this.fftConvolver) {
+            this.fftConvolver.setKernel(this.kernel);
+        }
     }
 
     /**
@@ -303,37 +320,13 @@ class Lenia {
 
     /**
      * Perform convolution to compute neighborhood potential
-     * Uses toroidal (wrap-around) boundary conditions
+     * Uses FFT for O(N² log N) performance instead of O(N² × K²) naive convolution
+     * Toroidal (wrap-around) boundary conditions are handled naturally by FFT
      */
     convolve() {
-        const { size, grid, potential, kernel } = this;
-        const kSize = kernel.size;
-        const kRadius = kernel.radius;
-
-        // Clear potential
-        potential.fill(0);
-
-        // Naive convolution (can be optimized with FFT for larger kernels)
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                let sum = 0;
-
-                for (let ky = 0; ky < kSize; ky++) {
-                    for (let kx = 0; kx < kSize; kx++) {
-                        const kernelVal = kernel.data[ky * kSize + kx];
-                        if (kernelVal === 0) continue;
-
-                        // Toroidal wrapping
-                        const gx = (x + kx - kRadius + size) % size;
-                        const gy = (y + ky - kRadius + size) % size;
-
-                        sum += grid[gy * size + gx] * kernelVal;
-                    }
-                }
-
-                potential[y * size + x] = sum;
-            }
-        }
+        // FFT convolution: IFFT(FFT(grid) × FFT(kernel))
+        // The kernel FFT is cached and only recomputed when parameters change
+        this.fftConvolver.convolve(this.grid, this.potential);
     }
 
     /**
@@ -457,6 +450,11 @@ class Lenia {
             Object.assign(this.kernelParams, species.params.kernelParams);
         }
 
+        // Load betas for quad4 kernel (Geminidae family)
+        if (species.params.betas) {
+            this.kernelParams.betas = species.params.betas;
+        }
+
         this.updateKernel();
 
         // Place pattern at center
@@ -485,6 +483,13 @@ class Lenia {
         this.grid = new Float32Array(newSize * newSize);
         this.nextGrid = new Float32Array(newSize * newSize);
         this.potential = new Float32Array(newSize * newSize);
+
+        // Recreate FFT convolver for new size
+        this.fftConvolver = FFT.createConvolver(newSize);
+        // Re-set the kernel FFT for the new convolver
+        if (this.kernel) {
+            this.fftConvolver.setKernel(this.kernel);
+        }
 
         // Simple nearest-neighbor scaling
         const scale = oldSize / newSize;

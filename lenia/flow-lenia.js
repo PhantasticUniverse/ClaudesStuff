@@ -97,6 +97,9 @@ class FlowLenia {
         this.creatureTracker = null;
         this.frameNumber = 0;
 
+        // FFT convolution for O(N² log N) performance
+        this.fftConvolver = FFT.createConvolver(size);
+
         this.updateKernel();
     }
 
@@ -106,11 +109,20 @@ class FlowLenia {
     updateKernel() {
         const p = this.kernelParams;
         switch (this.kernelType) {
+            case 'bump4':
+                this.kernel = Kernels.bump4(this.R);
+                break;
+            case 'quad4':
+                this.kernel = Kernels.quad4(this.R, p.betas || [1, 1, 1]);
+                break;
             case 'ring':
                 this.kernel = Kernels.ring(this.R, this.peaks);
                 break;
             case 'gaussian':
                 this.kernel = Kernels.gaussian(this.R);
+                break;
+            case 'filled':
+                this.kernel = Kernels.filled(this.R, p.falloff || 1.0);
                 break;
             case 'mexicanHat':
                 this.kernel = Kernels.mexicanHat(this.R);
@@ -132,6 +144,11 @@ class FlowLenia {
                 break;
             default:
                 this.kernel = Kernels.ring(this.R, this.peaks);
+        }
+
+        // Update FFT convolver with new kernel
+        if (this.fftConvolver) {
+            this.fftConvolver.setKernel(this.kernel);
         }
     }
 
@@ -169,34 +186,12 @@ class FlowLenia {
     /**
      * Compute neighborhood potential via convolution
      * U = K * A (kernel convolved with activations)
+     * Uses FFT for O(N² log N) performance instead of O(N² × K²) naive convolution
      */
     computePotential() {
-        const { size, A, potential, kernel } = this;
-        const kSize = kernel.size;
-        const kRadius = kernel.radius;
-
-        potential.fill(0);
-
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                let sum = 0;
-
-                for (let ky = 0; ky < kSize; ky++) {
-                    for (let kx = 0; kx < kSize; kx++) {
-                        const kernelVal = kernel.data[ky * kSize + kx];
-                        if (kernelVal === 0) continue;
-
-                        // Toroidal wrapping
-                        const gx = (x + kx - kRadius + size) % size;
-                        const gy = (y + ky - kRadius + size) % size;
-
-                        sum += A[gy * size + gx] * kernelVal;
-                    }
-                }
-
-                potential[y * size + x] = sum;
-            }
-        }
+        // FFT convolution: IFFT(FFT(A) × FFT(kernel))
+        // The kernel FFT is cached and only recomputed when parameters change
+        this.fftConvolver.convolve(this.A, this.potential);
     }
 
     /**
@@ -1259,6 +1254,11 @@ class FlowLenia {
             Object.assign(this.kernelParams, species.params.kernelParams);
         }
 
+        // Load betas for quad4 kernel (Geminidae family)
+        if (species.params.betas) {
+            this.kernelParams.betas = species.params.betas;
+        }
+
         this.updateKernel();
 
         // Place pattern at center
@@ -1308,6 +1308,13 @@ class FlowLenia {
         this.Fx = new Float32Array(newSize * newSize);
         this.Fy = new Float32Array(newSize * newSize);
         this.newA = new Float32Array(newSize * newSize);
+
+        // Recreate FFT convolver for new size
+        this.fftConvolver = FFT.createConvolver(newSize);
+        // Re-set the kernel FFT for the new convolver
+        if (this.kernel) {
+            this.fftConvolver.setKernel(this.kernel);
+        }
 
         // Simple nearest-neighbor scaling
         const scale = oldSize / newSize;

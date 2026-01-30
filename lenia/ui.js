@@ -873,6 +873,9 @@ function initUI() {
         });
     });
 
+    // Initialize pause button to correct state (starts paused)
+    document.getElementById('btn-pause').textContent = 'Resume';
+
     // Living Aquarium: Welcome overlay (first-run experience)
     initWelcomeOverlay();
 }
@@ -886,37 +889,69 @@ const PresetScenes = {
         name: 'Peaceful Pond',
         colorMap: 'aurora',
         species: 'grazer',
-        flowStrength: 0.8,
-        diffusion: 0.12,
-        foodSpawnRate: 0.004,
-        description: 'Slow grazers in a warm, green pond'
+        flowStrength: 0.5,           // Slow, drifting movement
+        diffusion: 0.12,             // Moderate diffusion for soft edges
+        foodSpawnRate: 0.003,
+        creatureCount: 5,            // Multiple peaceful creatures
+        creatureSpacing: 50,         // Well-spaced, not crowded
+        description: 'Slow grazers in a warm, green pond',
+        // Kernel type for this scene
+        kernelType: 'filled',        // New filled kernel for blob-like shapes
+        // Species overrides for extra-peaceful behavior
+        speciesOverrides: {
+            locomotionSpeed: 0.3,    // Slow graceful movement
+            turnRate: 0.04,          // Very gentle turns
+            growthMu: 0.15,          // Orbium-like growth center
+            growthSigma: 0.018       // Tight sigma for stable shape
+        }
     },
     'deep-ocean': {
         name: 'Deep Ocean',
         colorMap: 'bioluminescent',
         species: 'schooler',
-        flowStrength: 1.0,
-        diffusion: 0.08,
-        foodSpawnRate: 0.002,
-        description: 'Glowing creatures in the abyss'
+        flowStrength: 0.7,           // Gentle flow for graceful movement
+        diffusion: 0.06,             // Tight cohesive shapes that glow well
+        foodSpawnRate: 0.0015,
+        creatureCount: 7,            // School of creatures
+        creatureSpacing: 35,         // Closer for schooling effect
+        description: 'Glowing creatures in the abyss',
+        speciesOverrides: {
+            locomotionSpeed: 0.8,    // Moderate, graceful speed
+            alignmentWeight: 0.7,    // Strong schooling behavior
+            flockingRadius: 50,      // Large flocking awareness
+            turnRate: 0.12           // Smooth coordinated turns
+        }
     },
     'microscope': {
         name: 'Microscope',
         colorMap: 'microscopy',
         species: 'amoeba',
-        flowStrength: 1.2,
-        diffusion: 0.15,
-        foodSpawnRate: 0.003,
-        description: 'Watching life under a lens'
+        flowStrength: 0.6,           // Slow organic flow
+        diffusion: 0.18,             // High diffusion for blobby amoeba shapes
+        foodSpawnRate: 0.0025,
+        creatureCount: 4,            // A few distinct organisms
+        creatureSpacing: 55,         // Room to observe each
+        description: 'Watching life under a lens',
+        speciesOverrides: {
+            locomotionSpeed: 0.5,    // Slow amoeba crawl
+            turnRate: 0.08,          // Gradual direction changes
+            growthSigma: 0.04        // Very soft blobby edges
+        }
     },
     'cosmic-soup': {
         name: 'Cosmic Soup',
         colorMap: 'cosmic',
         species: 'vortex',
-        flowStrength: 1.5,
-        diffusion: 0.06,
-        foodSpawnRate: 0.002,
-        description: 'Nebular life forms swirl in space'
+        flowStrength: 1.2,           // Strong flow for swirling motion
+        diffusion: 0.05,             // Tight spiral structures
+        foodSpawnRate: 0.0015,
+        creatureCount: 5,            // Multiple swirling forms
+        creatureSpacing: 50,         // Space for spirals to develop
+        description: 'Nebular life forms swirl in space',
+        speciesOverrides: {
+            locomotionSpeed: 1.0,    // Moderate speed
+            turnRate: 0.15           // Smooth spiral motion
+        }
     }
 };
 
@@ -951,20 +986,98 @@ function loadPresetScene(sceneId) {
     if (environment) {
         environment.params.foodSpawnRate = scene.foodSpawnRate;
         setSliderValue('food-spawn', scene.foodSpawnRate);
+        environment.reset();
+        environment.initializeFood();
     }
 
-    // Load the species
+    // Get species data
     const speciesSelect = document.getElementById('species-select');
-    if (speciesSelect && Species[scene.species]) {
-        speciesSelect.value = scene.species;
-        flowLenia.loadSpecies(scene.species);
-        initialMass = flowLenia.totalMass();
-    }
-
-    // Enable sensory mode for sensory species
     const speciesData = Species[scene.species];
-    if (speciesData && speciesData.params.isSensorySpecies) {
-        setSensoryMode(true);
+
+    if (speciesSelect && speciesData) {
+        speciesSelect.value = scene.species;
+
+        // Clear the grid for fresh spawn
+        flowLenia.clear();
+
+        // Load species first to set kernel type and parameters
+        flowLenia.loadSpecies(scene.species);
+
+        // Override with scene-specific parameters
+        flowLenia.flowStrength = scene.flowStrength;
+        flowLenia.diffusion = scene.diffusion;
+
+        // Override kernel type if specified in scene
+        if (scene.kernelType) {
+            flowLenia.kernelType = scene.kernelType;
+            flowLenia.updateKernel();
+        }
+
+        // Enable sensory mode for sensory species
+        if (speciesData.params.isSensorySpecies) {
+            setSensoryMode(true);
+        }
+
+        // Spawn multiple creatures if specified
+        const count = scene.creatureCount || 1;
+        const spacing = scene.creatureSpacing || 50;
+        const size = flowLenia.size;
+
+        // Get growth parameters (with overrides if specified)
+        const baseMu = scene.speciesOverrides?.growthMu || speciesData.params.mu;
+        const baseSigma = scene.speciesOverrides?.growthSigma || speciesData.params.sigma;
+
+        // Apply growth function overrides to the simulation
+        if (scene.speciesOverrides?.growthMu !== undefined) {
+            flowLenia.mu = scene.speciesOverrides.growthMu;
+        }
+        if (scene.speciesOverrides?.growthSigma !== undefined) {
+            flowLenia.sigma = scene.speciesOverrides.growthSigma;
+        }
+
+        // Track positions to avoid overlap
+        const positions = [];
+
+        // Clear again before spawning (loadSpecies may have placed a pattern)
+        flowLenia.clear();
+
+        for (let i = 0; i < count; i++) {
+            // Find a valid spawn position
+            let x, y;
+            let attempts = 0;
+            do {
+                x = 30 + Math.random() * (size - 60);
+                y = 30 + Math.random() * (size - 60);
+                attempts++;
+            } while (attempts < 50 && positions.some(p => {
+                const dx = Math.abs(p.x - x);
+                const dy = Math.abs(p.y - y);
+                const wdx = Math.min(dx, size - dx);
+                const wdy = Math.min(dy, size - dy);
+                return Math.sqrt(wdx*wdx + wdy*wdy) < spacing;
+            }));
+
+            positions.push({ x, y });
+
+            // Draw creature blob with higher intensity for more filled appearance
+            flowLenia.drawBlob(x, y, 14, 1.0, baseMu, baseSigma);
+        }
+
+        initialMass = flowLenia.totalMass();
+
+        // Apply species overrides to creature tracker if present
+        if (scene.speciesOverrides && creatureTracker) {
+            // Create a modified genome for this preset
+            const baseGenome = speciesData.params.genome || {};
+            const modifiedGenome = { ...baseGenome, ...scene.speciesOverrides };
+            creatureTracker.baseGenome = new Genome(modifiedGenome);
+
+            // Update sensory params
+            if (scene.speciesOverrides.turnRate !== undefined) {
+                creatureTracker.sensory.turnRate = scene.speciesOverrides.turnRate;
+                setSliderValue('turn-rate', scene.speciesOverrides.turnRate);
+            }
+        }
     }
 
     generation = 0;

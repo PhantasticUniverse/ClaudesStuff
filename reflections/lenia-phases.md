@@ -277,3 +277,96 @@ Visual testing confirmed all Phase 13 features working correctly:
 
 **Regression Test**: ✅ PASS
 - Standard Lenia with Orbium glider works correctly
+
+---
+
+## Phase 14: Migration & Moving Food Zones
+
+### Seasonal Migration System
+
+Creatures follow moving food zones that orbit around the world:
+- Zone patterns: Circular orbit, Linear drift, Random walk
+- Zone speed and count are configurable
+- Creates natural migration corridors
+
+### Migrant Species
+
+New species type optimized for long-distance travel:
+- Higher locomotionSpeed (1.5)
+- Moderate food attraction
+- Low territorial behavior
+
+See `lenia/reflections/phase-14-migration.md` for full details.
+
+---
+
+## Phase 15: Parameter Localization (Multi-Species)
+
+### Per-Cell Parameters
+
+Each cell stores its own mu/sigma values that flow with mass:
+- Enables true multi-species coexistence
+- Hunters and prey can have fundamentally different growth rules
+- Parameters advect via the flow field
+
+### Creature Separation
+
+Flow field repulsion prevents merging:
+- Creatures maintain distinct boundaries
+- Predation becomes meaningful (hunter absorbs prey)
+- Population diversity preserved
+
+See `lenia/reflections/phase-15-parameter-localization.md` for full details.
+
+---
+
+## Phase 16: Creature Locomotion via Kernel Modulation
+
+### The Locomotion Problem
+
+Flow-Lenia creatures had heading/steering but couldn't translate across the grid - "swimming in place."
+
+### Solution: Kernel Offset
+
+Instead of fighting CA dynamics with steering forces, **shift the kernel** based on heading:
+- Cells sample potential from behind their position
+- Makes front conditions appear local
+- Growth at front, decay at back
+- Pattern naturally propels itself forward
+
+### Implementation
+
+New genome parameter: `locomotionSpeed` (0-3 pixels)
+- Higher = faster movement
+- Species-specific values
+
+See `lenia/reflections/phase-16-locomotion.md` for full details.
+
+---
+
+## Phase 17: Living Aquarium
+
+### Visual Enhancement
+
+Transform into immersive "digital aquarium":
+- **Zen Mode**: Full-screen viewing, press Z
+- **New palettes**: Bioluminescent, Microscopy, Cosmic, Aurora, Ember
+- **Preset scenes**: One-click beautiful configurations
+- **Ambient particles**: Floating dust motes create depth
+- **Screenshot vignette**: Polished captures
+
+### Bug Fixes
+
+**Swimmer/Vortex Locomotion**: Added missing `isSensorySpecies: true` and `locomotionSpeed` genome parameter. These presets now actually swim.
+
+**Initial State**: App now starts paused on Standard Lenia with Orbium preset.
+
+### Three-Layer Architecture Clarified
+
+| Layer | What It Does | Movement? |
+|-------|--------------|-----------|
+| Standard Lenia | CA growth/decay | Via asymmetric patterns |
+| Flow-Lenia | Mass conservation | No directed movement |
+| Sensory System | Tracking + kernel modulation | **Yes** |
+
+See `lenia/reflections/phase-17-living-aquarium.md` for full details.

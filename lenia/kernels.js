@@ -8,7 +8,116 @@
 
 const Kernels = {
     // List of available kernel types for UI
-    types: ['ring', 'gaussian', 'mexicanHat', 'asymmetric', 'spiral', 'star', 'multiScale', 'anisotropic'],
+    types: ['bump4', 'quad4', 'ring', 'gaussian', 'filled', 'mexicanHat', 'asymmetric', 'spiral', 'star', 'multiScale', 'anisotropic'],
+
+    /**
+     * Official Lenia bump4 kernel - the authentic Chakazul implementation
+     * This is the kernel that creates stable, moving Orbium creatures
+     *
+     * Formula: exp(4 - 1/(r*(1-r))) for 0 < r < 1, else 0
+     * This creates a smooth bell curve that peaks at r=0.5
+     *
+     * @param {number} radius - Kernel radius in cells
+     * @returns {Object} - Kernel object with data array
+     */
+    bump4(radius) {
+        const size = radius * 2 + 1;
+        const kernel = new Float32Array(size * size);
+        const center = radius;
+        let sum = 0;
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const dx = x - center;
+                const dy = y - center;
+                const dist = Math.sqrt(dx * dx + dy * dy) / radius;
+
+                if (dist > 0 && dist < 1) {
+                    // Official Lenia bump4 formula: exp(4 - 1/(r*(1-r)))
+                    const r = dist;
+                    const value = Math.exp(4 - 1 / (r * (1 - r)));
+                    kernel[y * size + x] = value;
+                    sum += value;
+                }
+            }
+        }
+
+        // Normalize kernel to sum to 1
+        if (sum > 0) {
+            for (let i = 0; i < kernel.length; i++) {
+                kernel[i] /= sum;
+            }
+        }
+
+        return { data: kernel, size: size, radius: radius, type: 'bump4' };
+    },
+
+    /**
+     * Official Lenia quad4 kernel - multi-peak kernel for Geminidae family
+     * Used by Geminium, Hydrogeminium, and other self-replicating creatures
+     *
+     * The quad4 kernel divides the radius [0,1] into B shells (where B = number of betas).
+     * Each shell uses the bump4 formula with its beta value as amplitude.
+     *
+     * Example usage:
+     * - quad4([1, 11/12]) = bimodal kernel (Aerogeminium) - 2 shells
+     * - quad4([1/2, 1, 2/3]) = trimodal (Hydrogeminium) - 3 shells
+     *
+     * The betas define shell amplitudes, NOT positions. Positions are evenly spaced.
+     *
+     * @param {number} radius - Kernel radius in cells
+     * @param {Array<number>} betas - Array of shell amplitudes (weights for each ring)
+     * @returns {Object} - Kernel object with data array
+     */
+    quad4(radius, betas = [1, 1, 1]) {
+        const size = radius * 2 + 1;
+        const kernel = new Float32Array(size * size);
+        const center = radius;
+        let sum = 0;
+
+        const B = betas.length; // Number of shells
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const dx = x - center;
+                const dy = y - center;
+                const r = Math.sqrt(dx * dx + dy * dy) / radius; // Normalized radius [0,1]
+
+                if (r > 0 && r < 1) {
+                    // Scale radius into shell space: Br ranges from 0 to B
+                    const Br = B * r;
+
+                    // Determine which shell we're in (0 to B-1)
+                    const shellIndex = Math.min(Math.floor(Br), B - 1);
+
+                    // Get the fractional position within this shell [0,1]
+                    const shellPos = Br - shellIndex;
+
+                    // Get the beta (amplitude) for this shell
+                    const beta = betas[shellIndex];
+
+                    // Apply bump4 formula to position within shell
+                    // The bump4 peaks at shellPos = 0.5 (middle of shell)
+                    let value = 0;
+                    if (shellPos > 0 && shellPos < 1) {
+                        value = beta * Math.exp(4 - 1 / (shellPos * (1 - shellPos)));
+                    }
+
+                    kernel[y * size + x] = value;
+                    sum += value;
+                }
+            }
+        }
+
+        // Normalize kernel to sum to 1
+        if (sum > 0) {
+            for (let i = 0; i < kernel.length; i++) {
+                kernel[i] /= sum;
+            }
+        }
+
+        return { data: kernel, size: size, radius: radius, type: 'quad4', betas };
+    },
 
     /**
      * Generate a ring-shaped kernel (the classic Lenia kernel)
@@ -90,6 +199,49 @@ const Kernels = {
         }
 
         return { data: kernel, size: size, radius: radius, type: 'gaussian' };
+    },
+
+    /**
+     * Generate a filled/blob kernel for soft, blob-like creatures
+     * Unlike the ring kernel which peaks at mid-radius, this peaks at center
+     * and has smooth falloff. Creates creatures that appear filled rather than hollow.
+     * Based on research from Chakazul's Lenia: unimodal kernels create filled shapes.
+     *
+     * @param {number} radius - Kernel radius in cells
+     * @param {number} falloff - How quickly it falls off (0.5 = wide, 2 = tight)
+     */
+    filled(radius, falloff = 1.0) {
+        const size = radius * 2 + 1;
+        const kernel = new Float32Array(size * size);
+        const center = radius;
+        let sum = 0;
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const dx = x - center;
+                const dy = y - center;
+                const dist = Math.sqrt(dx * dx + dy * dy) / radius;
+
+                if (dist <= 1) {
+                    // Smooth bump from center (dist=0) to edge (dist=1)
+                    // Uses polynomial bump: (1 - dist^2)^2 for smooth falloff
+                    // This creates a filled disc shape that tapers at edges
+                    const d = dist * falloff;
+                    const value = Math.max(0, (1 - d * d) * (1 - d * d));
+                    kernel[y * size + x] = value;
+                    sum += value;
+                }
+            }
+        }
+
+        // Normalize kernel to sum to 1
+        if (sum > 0) {
+            for (let i = 0; i < kernel.length; i++) {
+                kernel[i] /= sum;
+            }
+        }
+
+        return { data: kernel, size: size, radius: radius, type: 'filled', falloff };
     },
 
     /**
