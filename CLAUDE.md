@@ -6,7 +6,7 @@ Creative coding experiments. Focus: artificial life, generative art.
 
 Interactive web-based Lenia - continuous cellular automata producing lifelike creatures.
 
-**Status**: Phase 14 Complete (Migration Patterns & Environmental Dynamics)
+**Status**: Phase 15 Complete (Parameter Localization & Multi-Species Separation)
 
 ### Running
 
@@ -16,13 +16,30 @@ open lenia/index.html
 npx live-server lenia/
 ```
 
+### Ecosystem Mode (IMPORTANT)
+
+To run predator-prey ecosystem with proper mass conservation:
+1. Click **"Flow-Lenia"** button (enables mass-conservative dynamics)
+2. Click **"Enable Sensors"** (enables creature tracking)
+3. Click **"Spawn Ecosystem"** button
+
+**Do NOT use the "Ecosystem" tab** - it uses standard multi-channel Lenia which is not mass-conservative.
+
 ### Key Files
 
-- `lenia.js` - Core simulation
-- `flow-lenia.js` - Mass-conservative dynamics
-- `creatures.js` - Detection, tracking, evolution
-- `species.js` - Presets
+- `lenia.js` - Core simulation & rendering
+- `flow-lenia.js` - Mass-conservative dynamics, parameter localization
+- `creatures.js` - Detection, tracking, evolution, predation
+- `species.js` - Genome presets (hunter, prey, grazer, etc.)
+- `environment.js` - Food, signals, seasons, migration zones
 - `ui.js` - Controls
+
+### Phase 15 Features
+
+- **Parameter Localization**: Each cell stores mu/sigma values that flow with mass
+- **Multi-Species**: Hunters and prey operate under different growth rules
+- **Creature Separation**: Flow field repulsion prevents merging
+- **Predation**: Hunters can catch and consume prey
 
 ## Guidelines
 
@@ -35,4 +52,5 @@ npx live-server lenia/
 
 - [Lenia Paper](https://arxiv.org/abs/1812.05433) - Chan, 2018
 - [Flow-Lenia Paper](https://arxiv.org/abs/2212.07906) - Plantec et al., 2023
+- [Flow-Lenia GitHub](https://github.com/erwanplantec/FlowLenia) - Official implementation
 - [Lenia Portal](https://chakazul.github.io/lenia.html)

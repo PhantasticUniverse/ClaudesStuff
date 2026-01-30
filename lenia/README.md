@@ -67,11 +67,23 @@ Support for 2-4 interacting species with cross-channel dynamics:
 - **Mating signals** - Attract mates when fertile
 - **Territory signals** - Mark defended areas
 
-### Collective Behaviors (Phase 13) ✅ Verified
+### Collective Behaviors (Phase 13)
 - **Schooling/Flocking** - Prey align headings like bird murmurations
 - **Pack Hunting** - Predators flank prey from multiple angles
 - **Homing/Territory** - Creatures return to and defend birthplace
 - **Flock Links Overlay** - Visualize flocking neighbor connections
+
+### Migration Patterns (Phase 14)
+- **Seasonal Cycles** - Food spawn rate varies with seasons
+- **Moving Food Zones** - Hotspots that orbit, drift, or wander
+- **Migration Sensitivity** - Creatures follow strong food gradients
+- **Wanderlust** - Exploration behavior when food is scarce
+
+### Parameter Localization (Phase 15)
+- **Per-Cell Parameters** - Each cell stores mu/sigma values
+- **Parameter Flow** - Parameters transport with mass (weighted average mixing)
+- **Multi-Species** - Hunters and prey operate under different growth rules
+- **Creature Separation** - Flow field repulsion prevents merging
 
 ### Recording & Export
 - WebM video recording

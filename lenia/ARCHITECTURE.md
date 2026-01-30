@@ -17,6 +17,7 @@ The simulation creates emergent behaviors including:
 - Bioluminescent visual signaling (Phase 12)
 - Emergent collective behaviors: flocking, pack hunting, homing (Phase 13)
 - Migration patterns with seasonal cycles and moving food zones (Phase 14)
+- Parameter localization enabling true multi-species coexistence (Phase 15)
 
 ## File Structure
 
@@ -50,9 +51,15 @@ class FlowLenia {
     affinity    // G(U) - where mass "wants" to be
     Fx, Fy      // Flow field components
 
-    // Parameters
+    // Phase 15: Per-cell parameters (parameter localization)
+    P_mu        // Local growth center per cell (Float32Array)
+    P_sigma     // Local growth width per cell (Float32Array)
+    newP_mu     // Transport buffer for mu
+    newP_sigma  // Transport buffer for sigma
+
+    // Global Parameters
     R           // Kernel radius
-    mu, sigma   // Growth function center/width
+    mu, sigma   // Growth function center/width (defaults)
     dt          // Time step
     flowStrength    // How strongly mass follows gradient
     diffusion       // Prevents mass collapse
@@ -60,9 +67,11 @@ class FlowLenia {
     // Methods
     step()              // Main simulation step
     computePotential()  // Convolution K * A
-    computeAffinity()   // Growth function G(U)
+    computeAffinity()   // Growth function G(U), uses local params in ecosystem mode
     computeGradient()   // Flow field F = ∇(affinity)
-    transportMass()     // Mass-conservative advection
+    transportMass()     // Mass-conservative advection + parameter transport
+    applyCreatureRepulsion() // Push overlapping creatures apart (Phase 15)
+    drawBlob(x, y, r, v, localMu, localSigma) // Draw with species-specific params
 }
 ```
 
@@ -223,7 +232,7 @@ class CreatureMemory {
 │    └─ U = K * A (convolution)                               │
 │                                                             │
 │ 10. computeAffinity()                                       │
-│    └─ affinity = G(U) with local morphology influence       │
+│    └─ affinity = G(U) with local mu/sigma (Phase 15)        │
 │                                                             │
 │ 11. computeGradient()                                       │
 │    └─ F = ∇(affinity) + directional bias                    │
@@ -232,9 +241,12 @@ class CreatureMemory {
 │    └─ Add creature heading influence to flow field          │
 │                                                             │
 │ 13. transportMass()                                         │
-│    └─ Reintegration tracking (mass-conservative advection)  │
+│    └─ Mass-conservative advection + parameter transport     │
 │                                                             │
-│ 14. applyDiffusion()                                        │
+│ 14. applyCreatureRepulsion() (Phase 15)                     │
+│    └─ Flow field forces push overlapping creatures apart    │
+│                                                             │
+│ 15. applyDiffusion()                                        │
 │    └─ Laplacian diffusion to prevent collapse               │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -478,6 +490,106 @@ homingReduction = 1 - (scarcityFactor * wanderlust * 0.8);
 
 - **Migration Trails**: Golden/amber overlay showing where creatures traveled
 - **Zone Centers**: Bright pulsing dots with glow effect at zone positions
+
+## Parameter Localization (Phase 15)
+
+### The Multi-Species Problem
+
+Standard Lenia uses global mu/sigma parameters. When multiple species with different parameter needs share the same grid, they either:
+1. Share parameters (forcing same dynamics, causing merging)
+2. Use separate grids (multi-channel, but not mass-conservative)
+
+Flow-Lenia solves this with **parameter localization** - each cell stores its own parameters.
+
+### Per-Cell Parameter Storage
+
+```javascript
+// In FlowLenia constructor
+this.P_mu = new Float32Array(size * size);     // Local growth center
+this.P_sigma = new Float32Array(size * size);  // Local growth width
+this.newP_mu = new Float32Array(size * size);  // Transport buffer
+this.newP_sigma = new Float32Array(size * size);
+```
+
+### Parameter Transport (Weighted Average Mixing)
+
+Parameters flow with mass during transport:
+
+```javascript
+// In transportMass()
+// 1. Transport parameters weighted by mass
+newP_mu[destIdx] += sourceMu * mass * weight;
+newP_sigma[destIdx] += sourceSigma * mass * weight;
+
+// 2. After transport, compute weighted average
+if (newA[i] > 0.0001) {
+    P_mu[i] = newP_mu[i] / newA[i];   // sum(mass*mu) / sum(mass)
+    P_sigma[i] = newP_sigma[i] / newA[i];
+} else {
+    // Reset to defaults for empty cells
+    P_mu[i] = this.mu;
+    P_sigma[i] = this.sigma;
+}
+```
+
+### Localized Growth Function
+
+In ecosystem mode, `computeAffinity()` uses per-cell parameters:
+
+```javascript
+// In computeAffinity() when useLocalizedParams = true
+for (let i = 0; i < size * size; i++) {
+    const localMu = P_mu[i];
+    const localSigma = P_sigma[i];
+    affinity[i] = this.growthWithMorphology(potential[i], localMu, localSigma);
+}
+```
+
+### Species-Specific Spawning
+
+Different species spawn with different parameters:
+
+```javascript
+// Hunters: mu=0.24, sigma=0.028
+flowLenia.drawBlob(pos.x, pos.y, 14, 0.9, hunterMu, hunterSigma);
+
+// Prey: mu=0.18, sigma=0.035
+flowLenia.drawBlob(pos.x, pos.y, 10, 0.85, preyMu, preySigma);
+```
+
+### Flow Field Repulsion
+
+When creatures get too close, direct flow field forces push them apart:
+
+```javascript
+// In applyCreatureRepulsion()
+for each creature pair {
+    if (distance < threshold) {
+        // Calculate repulsion direction
+        const force = (1 - distance/threshold)^2 * repulsionStrength;
+        // Apply force to flow field cells belonging to each creature
+        Fx[idx] += dirX * force;
+        Fy[idx] += dirY * force;
+    }
+}
+```
+
+### Critical: UI Mode Selection
+
+**IMPORTANT**: The "Ecosystem" tab uses `multiChannel` (standard Lenia, NOT mass-conservative!).
+
+For proper multi-species with parameter localization:
+1. Use **Single mode** with Flow-Lenia enabled
+2. Click **"Spawn Ecosystem"** button
+3. This uses Flow-Lenia physics with parameter localization
+
+### Results
+
+| Metric | Before Phase 15 | After Phase 15 |
+|--------|-----------------|----------------|
+| Creature separation | Merged into blob | Maintained separate |
+| Mass conservation | +1470% (explosion) | -20% (expected deaths) |
+| Species identity | Lost on overlap | Preserved |
 
 ## Performance Notes
 
