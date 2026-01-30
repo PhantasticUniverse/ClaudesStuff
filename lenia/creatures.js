@@ -399,7 +399,7 @@ class CreatureTracker {
             foodWeight: 1.0,          // Attraction to food (0-2)
             pheromoneWeight: 0.5,     // Attraction to pheromones (0-2)
             socialWeight: 0.3,        // Attraction to other creatures (can be negative)
-            socialDistance: 50,       // Distance at which social forces apply
+            socialDistance: 70,       // Distance at which social forces apply (increased for better detection)
             turnRate: 0.15,           // How fast creatures can turn (0-1)
             isPredator: false         // If true, attracted to smaller creatures
         };
@@ -479,6 +479,45 @@ class CreatureTracker {
             // Phase 13: Territory/homing fields
             this.homeX = null;        // Birth location X (set when first detected)
             this.homeY = null;        // Birth location Y (set when first detected)
+
+            // Phase 15: Velocity history for predictive pursuit
+            // Stores last N positions for calculating smoothed velocity
+            this.positionHistory = [];  // Array of {x, y, frame}
+            this.maxHistoryLength = 5;  // Keep last 5 positions for smoothing
+        }
+
+        /**
+         * Phase 15: Get smoothed velocity from position history
+         * More reliable than frame-to-frame delta for prediction
+         */
+        getSmoothedVelocity(size) {
+            if (this.positionHistory.length < 2) {
+                return { vx: this.vx, vy: this.vy };
+            }
+
+            // Use oldest and newest positions for smoothed calculation
+            const oldest = this.positionHistory[0];
+            const newest = this.positionHistory[this.positionHistory.length - 1];
+            const frameDelta = newest.frame - oldest.frame;
+
+            if (frameDelta < 1) {
+                return { vx: this.vx, vy: this.vy };
+            }
+
+            // Calculate toroidal delta
+            let dx = newest.x - oldest.x;
+            let dy = newest.y - oldest.y;
+
+            // Handle wraparound
+            if (dx > size / 2) dx -= size;
+            if (dx < -size / 2) dx += size;
+            if (dy > size / 2) dy -= size;
+            if (dy < -size / 2) dy += size;
+
+            return {
+                vx: dx / frameDelta,
+                vy: dy / frameDelta
+            };
         }
 
         /**
@@ -666,6 +705,17 @@ class CreatureTracker {
                                dx * params.velocitySmoothing;
                 bestMatch.vy = bestMatch.vy * (1 - params.velocitySmoothing) +
                                dy * params.velocitySmoothing;
+
+                // Phase 15: Update position history for predictive pursuit
+                bestMatch.positionHistory.push({
+                    x: newCreature.x,
+                    y: newCreature.y,
+                    frame: frameNumber
+                });
+                // Keep only last N positions
+                while (bestMatch.positionHistory.length > bestMatch.maxHistoryLength) {
+                    bestMatch.positionHistory.shift();
+                }
 
                 // Update heading from velocity
                 if (bestMatch.speed > 0.1) {
@@ -1093,23 +1143,79 @@ class CreatureTracker {
                     // Force magnitude decreases with distance
                     const strength = 1 - dist / sensory.socialDistance;
 
-                    // Predator/prey: attracted to smaller, repelled by larger
+                    // Predator/prey dynamics based on isPredator flag
                     if (sensory.isPredator) {
-                        if (other.mass < creature.mass * 0.8) {
-                            // Attracted to smaller (prey)
-                            forceX += nx * strength * other.mass / creature.mass;
-                            forceY += ny * strength * other.mass / creature.mass;
-                        } else {
-                            // Repelled by similar or larger
-                            forceX -= nx * strength * 0.5;
-                            forceY -= ny * strength * 0.5;
+                        // Check if other is prey (not a predator)
+                        const otherIsPrey = other.genome && !other.genome.isPredator;
+
+                        if (otherIsPrey) {
+                            // Phase 15: PREDICTIVE PURSUIT - chase where prey WILL be, not where it IS
+                            // This is the key insight from Boids: use velocity to predict intercept point
+
+                            // Get SMOOTHED prey velocity from position history (more reliable than frame-to-frame)
+                            const smoothedVel = other.getSmoothedVelocity ?
+                                other.getSmoothedVelocity(size) : { vx: other.vx || 0, vy: other.vy || 0 };
+                            const preyVx = smoothedVel.vx;
+                            const preyVy = smoothedVel.vy;
+                            const preySpeed = Math.sqrt(preyVx * preyVx + preyVy * preyVy);
+
+                            // Estimate hunter's closing speed (based on typical Lenia movement ~0.5-1.0 per frame)
+                            const hunterSpeed = 0.8;
+
+                            // Calculate look-ahead time based on distance
+                            // Closer prey = shorter prediction, farther prey = longer prediction
+                            // Cap at 30 frames to avoid overshooting
+                            const lookAheadTime = Math.min(30, dist / Math.max(hunterSpeed, 0.3));
+
+                            // Predict prey's future position
+                            let predictedX = other.x + preyVx * lookAheadTime;
+                            let predictedY = other.y + preyVy * lookAheadTime;
+
+                            // Wrap predicted position to toroidal space
+                            predictedX = ((predictedX % size) + size) % size;
+                            predictedY = ((predictedY % size) + size) % size;
+
+                            // Calculate direction to predicted position (not current position!)
+                            const predDx = this.toroidalDelta(predictedX, creature.x, size);
+                            const predDy = this.toroidalDelta(predictedY, creature.y, size);
+                            const predLen = Math.sqrt(predDx * predDx + predDy * predDy);
+
+                            if (predLen > 0.1) {
+                                const predNx = predDx / predLen;
+                                const predNy = predDy / predLen;
+
+                                // Strong pursuit force toward predicted intercept point
+                                // Increase strength when prey is moving (prediction is more valuable)
+                                const pursuitBonus = preySpeed > 0.2 ? 1.5 : 1.0;
+                                forceX += predNx * strength * 3.0 * pursuitBonus;
+                                forceY += predNy * strength * 3.0 * pursuitBonus;
+                            } else {
+                                // Very close - direct pursuit
+                                forceX += nx * strength * 3.0;
+                                forceY += ny * strength * 3.0;
+                            }
+                        } else if (other.genome?.isPredator) {
+                            // Slight repulsion from other hunters (avoid competition)
+                            forceX -= nx * strength * 0.3;
+                            forceY -= ny * strength * 0.3;
                         }
                     } else {
-                        // Normal: attracted to similar size (schooling)
-                        const sizeSimilarity = Math.min(creature.mass, other.mass) /
-                                             Math.max(creature.mass, other.mass);
-                        forceX += nx * strength * sizeSimilarity;
-                        forceY += ny * strength * sizeSimilarity;
+                        // Non-predator (prey) behavior
+                        // Phase 15: Prey FLEE from predators, school with other prey
+                        const otherIsPredator = other.genome?.isPredator;
+
+                        if (otherIsPredator) {
+                            // STRONG fleeing from predators - run away!
+                            // Use negative direction (away from predator)
+                            forceX -= nx * strength * 3.0;
+                            forceY -= ny * strength * 3.0;
+                        } else {
+                            // School with other prey (attracted to similar size)
+                            const sizeSimilarity = Math.min(creature.mass, other.mass) /
+                                                 Math.max(creature.mass, other.mass);
+                            forceX += nx * strength * sizeSimilarity * 0.5;
+                            forceY += ny * strength * sizeSimilarity * 0.5;
+                        }
                     }
                 }
             }
@@ -1138,6 +1244,7 @@ class CreatureTracker {
 
     /**
      * Get steering force to inject into flow field at a position
+     * Phase 15: Now uses per-creature turn rate and boosts hunters for better pursuit
      */
     getSteeringForce(x, y) {
         const idx = Math.floor(y) * this.size + Math.floor(x);
@@ -1151,8 +1258,16 @@ class CreatureTracker {
             for (const cell of creature.cells) {
                 if (Math.floor(cell.x) === Math.floor(x) &&
                     Math.floor(cell.y) === Math.floor(y)) {
-                    // Return steering force based on heading
-                    const steer = this.sensory.turnRate;
+                    // Use per-creature turn rate from genome, or global default
+                    let steer = creature.genome?.turnRate ?? this.sensory.turnRate;
+
+                    // Phase 15: Boost hunter steering for better pursuit
+                    // Hunters need to be SIGNIFICANTLY faster than prey to catch them
+                    // This gives hunters ~3x steering thrust for effective pursuit
+                    if (creature.genome?.isPredator) {
+                        steer *= 3.0;
+                    }
+
                     return {
                         x: Math.cos(creature.heading) * steer * cell.value,
                         y: Math.sin(creature.heading) * steer * cell.value
@@ -1673,8 +1788,11 @@ class CreatureTracker {
                     preyCreature.x, preyCreature.y
                 );
 
-                // Catch radius based on both creature sizes (generous to allow predation)
-                const catchRadius = (hunter.radius + preyCreature.radius) * 1.0;
+                // Catch radius based on both creature sizes
+                // Phase 15: SIGNIFICANTLY increased to 3.5x for Flow-Lenia where mass fields overlap
+                // before centers get close. Hunters were getting to dist=12.1 with catchRadius=12.0 and
+                // dying before catching - need more margin for successful predation.
+                const catchRadius = (hunter.radius + preyCreature.radius) * 3.5;
 
                 // Phase 11: Record danger memory for nearby prey (within 2x catch radius)
                 const dangerRadius = catchRadius * 2;

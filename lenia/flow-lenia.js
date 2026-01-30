@@ -545,6 +545,8 @@ class FlowLenia {
         // Phase 4: Add steering forces from creatures
         if (this.sensoryEnabled && this.creatureTracker) {
             this.applySteeringForces();
+            // Phase 15: Apply pursuit boost for hunters (based on CA predator-prey research)
+            this.applyPursuitBoost();
         }
 
         this.transportMass();      // Mass-conservative transport
@@ -569,6 +571,76 @@ class FlowLenia {
                 const steering = this.creatureTracker.getSteeringForce(x, y);
                 Fx[idx] += steering.x * steeringStrength;
                 Fy[idx] += steering.y * steeringStrength;
+            }
+        }
+    }
+
+    /**
+     * Phase 15: Apply pursuit boost for hunters
+     * Based on CA predator-prey research - hunters get extra flow velocity toward prey
+     * This is similar to the "pursuit subrule" in Boccara et al. (1994)
+     */
+    applyPursuitBoost() {
+        if (!this.creatureTracker || !this.creatureTracker.ecosystemMode) return;
+
+        const { size, Fx, Fy, A } = this;
+        const tracker = this.creatureTracker;
+        const pursuitStrength = 5.0;  // Phase 15: Significantly increased for effective hunting
+
+        // Get all hunters and prey
+        const hunters = tracker.creatures.filter(c => c.genome?.isPredator);
+        const prey = tracker.creatures.filter(c => c.genome && !c.genome.isPredator);
+
+        if (hunters.length === 0 || prey.length === 0) return;
+
+        // For each hunter, add extra flow toward nearest prey
+        for (const hunter of hunters) {
+            // Find nearest prey using predictive position
+            let nearestPrey = null;
+            let nearestDist = Infinity;
+
+            for (const p of prey) {
+                const dist = tracker.toroidalDistance(hunter.x, hunter.y, p.x, p.y);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestPrey = p;
+                }
+            }
+
+            if (!nearestPrey || nearestDist > 150) continue;  // Phase 15: Extended range for active hunting
+
+            // Calculate pursuit vector (using predictive position from smoothed velocity)
+            const smoothedVel = nearestPrey.getSmoothedVelocity ?
+                nearestPrey.getSmoothedVelocity(size) : { vx: nearestPrey.vx || 0, vy: nearestPrey.vy || 0 };
+
+            // Predict where prey will be (shorter lookahead for direct pursuit boost)
+            const lookAhead = Math.min(15, nearestDist / 2);
+            let targetX = nearestPrey.x + smoothedVel.vx * lookAhead;
+            let targetY = nearestPrey.y + smoothedVel.vy * lookAhead;
+            targetX = ((targetX % size) + size) % size;
+            targetY = ((targetY % size) + size) % size;
+
+            // Direction from hunter to predicted prey position
+            const dx = tracker.toroidalDelta(targetX, hunter.x, size);
+            const dy = tracker.toroidalDelta(targetY, hunter.y, size);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 0.1) continue;
+
+            const dirX = dx / dist;
+            const dirY = dy / dist;
+
+            // Apply extra flow boost to all cells belonging to this hunter
+            // Boost is stronger when closer to prey (more urgent pursuit)
+            // Phase 15: Quadratic proximity boost for aggressive closing
+            const proximityBoost = 1 + Math.pow(1 - nearestDist / 150, 2) * 3;
+
+            for (const cell of hunter.cells) {
+                const idx = Math.floor(cell.y) * size + Math.floor(cell.x);
+                if (idx >= 0 && idx < size * size && A[idx] > 0.1) {
+                    // Add pursuit velocity to flow field at this cell
+                    Fx[idx] += dirX * pursuitStrength * proximityBoost * cell.value;
+                    Fy[idx] += dirY * pursuitStrength * proximityBoost * cell.value;
+                }
             }
         }
     }

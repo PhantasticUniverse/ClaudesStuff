@@ -578,7 +578,7 @@ const Species = {
             mu: 0.24,
             sigma: 0.028,
             dt: 0.12,
-            flowStrength: 1.3,
+            flowStrength: 1.8,    // Phase 15: FASTER than prey (1.2) for successful hunting
             diffusion: 0.06,
             isFlowSpecies: true,
             isSensorySpecies: true,
@@ -591,7 +591,7 @@ const Species = {
                 foodWeight: 0.0,        // Ignores food
                 pheromoneWeight: 0.5,   // Uses pheromones to track
                 socialWeight: 1.5,      // Strong creature attraction
-                turnRate: 0.35,         // Fast turning for pursuit
+                turnRate: 0.45,         // Phase 15: Very fast turning for predictive pursuit
                 isPredator: true        // Chases smaller creatures
             },
             // Environment settings
@@ -608,9 +608,9 @@ const Species = {
                 foodWeight: 0.0,
                 pheromoneWeight: 0.5,
                 socialWeight: 1.5,
-                turnRate: 0.35,
+                turnRate: 0.45,         // Phase 15: Very fast turning for predictive pursuit
                 speedPreference: 1.3,
-                metabolismRate: 0.018,   // Low metabolism for hunter sustainability (can survive longer between kills)
+                metabolismRate: 0.010,   // Phase 15: Very low metabolism - hunters need to survive long enough to catch prey
                 reproductionThreshold: 80, // Increased from 60 for slower population growth
                 reproductionCost: 0.65,
                 sizePreference: 1.3,
@@ -680,7 +680,7 @@ const Species = {
             mu: 0.18,
             sigma: 0.035,
             dt: 0.14,
-            flowStrength: 1.4,    // Fast movement
+            flowStrength: 1.2,    // Phase 15: SLOWER than hunter (1.8) - realistic predator advantage
             diffusion: 0.12,
             isFlowSpecies: true,
             isSensorySpecies: true,
