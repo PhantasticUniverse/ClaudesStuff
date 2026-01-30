@@ -21,6 +21,129 @@ let fps = 0;
 // Living Aquarium: Zen Mode state
 let zenModeActive = false;
 
+// Living Aquarium: Particle system for ambient atmosphere
+let ambientParticles = null;
+
+/**
+ * Ambient Particle System - Creates floating dust motes/plankton for atmosphere
+ */
+class AmbientParticleSystem {
+    constructor(count = 80) {
+        this.particles = [];
+        this.maxCount = count;
+        this.enabled = true;
+
+        // Initialize particles
+        for (let i = 0; i < count; i++) {
+            this.particles.push(this.createParticle());
+        }
+    }
+
+    createParticle(x = null, y = null) {
+        return {
+            x: x !== null ? x : Math.random() * width,
+            y: y !== null ? y : Math.random() * height,
+            vx: (Math.random() - 0.5) * 1.5,
+            vy: (Math.random() - 0.5) * 1.5 - 0.3, // Slight upward drift
+            size: 1 + Math.random() * 3,
+            opacity: 0.2 + Math.random() * 0.4,
+            twinkle: Math.random() * Math.PI * 2, // Phase for twinkling
+            twinkleSpeed: 0.02 + Math.random() * 0.03,
+            driftAngle: Math.random() * Math.PI * 2, // For organic wandering
+            driftSpeed: 0.01 + Math.random() * 0.02
+        };
+    }
+
+    update(creatures = null) {
+        if (!this.enabled) return;
+
+        for (let p of this.particles) {
+            // Update twinkle phase
+            p.twinkle += p.twinkleSpeed;
+
+            // Organic wandering motion - slowly rotating drift direction
+            p.driftAngle += (Math.random() - 0.5) * 0.1;
+            p.vx += Math.cos(p.driftAngle) * 0.15;
+            p.vy += Math.sin(p.driftAngle) * 0.15 - 0.05; // Slight upward bias
+
+            // Dampen velocity to prevent runaway speeds
+            p.vx *= 0.95;
+            p.vy *= 0.95;
+
+            // React to nearby creatures (get pushed away gently)
+            if (creatures && creatures.length > 0) {
+                for (const creature of creatures) {
+                    const sim = (typeof flowLenia !== 'undefined' && flowLenia) ? flowLenia : lenia;
+                    const cellSize = width / sim.size;
+                    const cx = creature.x * cellSize;
+                    const cy = creature.y * cellSize;
+                    const dx = p.x - cx;
+                    const dy = p.y - cy;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const pushRadius = creature.radius * cellSize * 3;
+
+                    if (dist < pushRadius && dist > 0) {
+                        const force = (1 - dist / pushRadius) * 0.5;
+                        p.vx += (dx / dist) * force;
+                        p.vy += (dy / dist) * force;
+                    }
+                }
+            }
+
+            // Update position
+            p.x += p.vx;
+            p.y += p.vy;
+
+            // Wrap around edges
+            if (p.x < -10) p.x = width + 10;
+            if (p.x > width + 10) p.x = -10;
+            if (p.y < -10) p.y = height + 10;
+            if (p.y > height + 10) p.y = -10;
+        }
+    }
+
+    draw(colorMap = 'bioluminescent') {
+        if (!this.enabled) return;
+
+        push();
+        noStroke();
+
+        // Get base color from current color map (use bright end)
+        const colors = ColorMaps[colorMap] || ColorMaps.bioluminescent;
+        const baseColor = colors[colors.length - 2]; // Second brightest
+
+        for (let p of this.particles) {
+            // Calculate twinkle effect
+            const twinkle = 0.5 + 0.5 * Math.sin(p.twinkle);
+            const alpha = p.opacity * twinkle * 255;
+
+            // Draw particle with soft glow
+            fill(baseColor[0], baseColor[1], baseColor[2], alpha * 0.3);
+            ellipse(p.x, p.y, p.size * 3, p.size * 3);
+
+            fill(baseColor[0], baseColor[1], baseColor[2], alpha * 0.7);
+            ellipse(p.x, p.y, p.size * 1.5, p.size * 1.5);
+
+            fill(255, 255, 255, alpha);
+            ellipse(p.x, p.y, p.size * 0.5, p.size * 0.5);
+        }
+
+        pop();
+    }
+
+    setEnabled(enabled) {
+        this.enabled = enabled;
+    }
+
+    resize() {
+        // Redistribute particles when window resizes
+        for (let p of this.particles) {
+            if (p.x > width) p.x = Math.random() * width;
+            if (p.y > height) p.y = Math.random() * height;
+        }
+    }
+}
+
 // Phase 12: Signal visualization toggles
 let showAlarmSignals = false;
 let showHuntingSignals = false;
@@ -414,6 +537,9 @@ function setup() {
     lenia = new Lenia(256);
     lenia.loadSpecies('orbium');
 
+    // Initialize ambient particle system for Living Aquarium
+    ambientParticles = new AmbientParticleSystem(80);
+
     // Initialize UI
     initUI();
 
@@ -632,6 +758,23 @@ function draw() {
         typeof evolutionEnabled !== 'undefined' && evolutionEnabled &&
         typeof creatureTracker !== 'undefined' && creatureTracker) {
         drawCreatureEnergyBars();
+    }
+
+    // Living Aquarium: Draw ambient particles (most visible in Zen mode)
+    if (ambientParticles) {
+        // Get creatures for particle interaction
+        const creatures = (typeof creatureTracker !== 'undefined' && creatureTracker)
+            ? creatureTracker.getCreatures() : [];
+
+        // Only update/draw in Zen mode or when explicitly enabled
+        if (zenModeActive) {
+            ambientParticles.setEnabled(true);
+            ambientParticles.update(creatures);
+            const sim = (typeof useFlowLenia !== 'undefined' && useFlowLenia && flowLenia) ? flowLenia : lenia;
+            ambientParticles.draw(sim.colorMap);
+        } else {
+            ambientParticles.setEnabled(false);
+        }
     }
 
     // Update stats
@@ -1113,6 +1256,11 @@ function enterZenMode() {
     // Resize canvas to fill screen
     resizeCanvas(windowWidth, windowHeight);
 
+    // Resize and redistribute particles for fullscreen
+    if (ambientParticles) {
+        ambientParticles.resize();
+    }
+
     // If simulation is empty or very sparse, spawn a peaceful ecosystem
     const sim = (typeof useFlowLenia !== 'undefined' && useFlowLenia && flowLenia) ? flowLenia : lenia;
     if (sim.totalMass() < 100) {
@@ -1223,4 +1371,9 @@ function windowResized() {
     const container = document.getElementById('canvas-container');
     const canvasSize = Math.min(container.clientWidth, container.clientHeight) - 40;
     resizeCanvas(canvasSize, canvasSize);
+
+    // Resize particle system
+    if (ambientParticles) {
+        ambientParticles.resize();
+    }
 }

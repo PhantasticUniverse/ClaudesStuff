@@ -56,6 +56,7 @@ To run predator-prey ecosystem with proper mass conservation:
 - **New Color Palettes**: Bioluminescent, Microscopy, Cosmic, Aurora, Ember
 - **Preset Scenes**: One-click beautiful configurations
 - **Enhanced Glow**: Creatures have pulsing ambient glow in Zen mode
+- **Ambient Particles**: Floating dust motes/plankton create depth and atmosphere
 - **Screenshot Vignette**: Auto-applied for polished captures
 - **Welcome Overlay**: First-run experience guides new users
 
